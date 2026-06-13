@@ -1,5 +1,9 @@
-const STORAGE_KEY = 'life_tracker_v8';
-const LEGACY_KEYS = ['life_tracker_v7','life_tracker_v6','life_tracker_v5','life_tracker_v4','life_tracker_v3','life_tracker_v2','life_tracker_data'];
+const APP_VERSION = 'v9';
+// Stabiler Speichername: bleibt ab jetzt bei jeder neuen Version gleich,
+// damit Updates keine Stammdaten/Einträge mehr verlieren.
+const STORAGE_KEY = 'life_tracker_data';
+// Alte Versionsspeicher werden nur zur Migration gelesen.
+const LEGACY_KEYS = ['life_tracker_v8','life_tracker_v7','life_tracker_v6','life_tracker_v5','life_tracker_v4','life_tracker_v3','life_tracker_v2'];
 const defaultData = {
   categories: ['Lebensmittel','Getränke','Haushalt','Hygiene','Tiere','Garten','Medizin','Finanzen','Sonstiges'],
   masterItems: [],
@@ -12,29 +16,43 @@ const el = id => document.getElementById(id);
 const todayISO = () => new Date().toISOString().slice(0,10);
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,8);
 
+function dataScore(d){
+  if(!d) return -1;
+  return (d.masterItems?.length||0)*20 + (d.consumption?.length||0)*3 + (d.appointments?.length||0)*3 + (d.goals?.length||0)*3 + (d.categories?.length||0);
+}
 function loadData(){
   try{
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if(raw) return normalize(JSON.parse(raw));
-
-    // Update-Schutz: ältere Versionen hatten eigene Speicher-Namen.
-    // Beim Hochladen einer neuen Version werden vorhandene Daten jetzt gesucht
-    // und in den neuen Speicher übernommen, statt mit leeren Stammdaten zu starten.
-    let best = null;
-    for(const key of LEGACY_KEYS){
-      const oldRaw = localStorage.getItem(key);
-      if(!oldRaw) continue;
-      const oldData = normalize(JSON.parse(oldRaw));
-      const score = (oldData.masterItems?.length||0)*10 + (oldData.consumption?.length||0) + (oldData.appointments?.length||0) + (oldData.goals?.length||0);
-      if(!best || score > best.score) best = {key, data: oldData, score};
+    // Update-Schutz: Wir lesen alle bekannten Speicherstände und nehmen den vollständigsten.
+    // Dadurch kann eine neue Version nicht versehentlich mit leeren Stammdaten starten,
+    // auch wenn vorher v6/v7/v8 oder der stabile Speicher verwendet wurde.
+    const candidates = [];
+    const keys = [STORAGE_KEY, ...LEGACY_KEYS];
+    for(const key of keys){
+      const raw = localStorage.getItem(key);
+      if(!raw) continue;
+      try{
+        const oldData = normalize(JSON.parse(raw));
+        candidates.push({key, data: oldData, score: dataScore(oldData)});
+      }catch(e){
+        console.warn('Speicher konnte nicht gelesen werden:', key, e);
+      }
     }
-    if(best){
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(best.data));
-      return best.data;
+    if(candidates.length){
+      candidates.sort((a,b)=>b.score-a.score);
+      const best = candidates[0].data;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(best));
+      localStorage.setItem('life_tracker_last_good_backup', JSON.stringify(best));
+      return best;
     }
-    return structuredClone(defaultData);
+    const fresh = structuredClone(defaultData);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));
+    return fresh;
   }catch(err){
     console.error('Daten konnten nicht geladen werden:', err);
+    try{
+      const backup = localStorage.getItem('life_tracker_last_good_backup');
+      if(backup) return normalize(JSON.parse(backup));
+    }catch(e){}
     return structuredClone(defaultData);
   }
 }
@@ -44,7 +62,7 @@ function normalize(d){
   normalized.consumption = normalized.consumption.map(i=>({...i, estimate:i.estimate||i.estimateDays||'', unit:i.unit||'days'}));
   return normalized;
 }
-function saveData(){localStorage.setItem(STORAGE_KEY,JSON.stringify(data));renderAll()}
+function saveData(){localStorage.setItem(STORAGE_KEY,JSON.stringify(data));localStorage.setItem('life_tracker_last_good_backup',JSON.stringify(data));renderAll()}
 function escapeHTML(s){return String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
 function fmt(date){return date?new Date(date+'T00:00:00').toLocaleDateString('de-DE'):'kein Datum'}
 function daysBetween(a,b){return Math.ceil((new Date(b+'T00:00:00')-new Date(a+'T00:00:00'))/86400000)}
