@@ -1,4 +1,4 @@
-const STORAGE_KEY = 'life_tracker_v2';
+const STORAGE_KEY = 'life_tracker_v7';
 const defaultData = {
   categories: ['Lebensmittel','Getränke','Haushalt','Hygiene','Tiere','Garten','Medizin','Finanzen','Sonstiges'],
   masterItems: [],
@@ -14,7 +14,8 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,8
 function loadData(){try{const raw=localStorage.getItem(STORAGE_KEY)||localStorage.getItem('life_tracker_data');return raw?normalize(JSON.parse(raw)):structuredClone(defaultData)}catch{return structuredClone(defaultData)}}
 function normalize(d){
   const normalized={...structuredClone(defaultData),...d,categories:d.categories?.length?d.categories:structuredClone(defaultData.categories),masterItems:d.masterItems||[],consumption:d.consumption||[],appointments:d.appointments||[],goals:d.goals||[]};
-  normalized.masterItems = normalized.masterItems.map(i=>({...i, amount:i.amount||''}));
+  normalized.masterItems = normalized.masterItems.map(i=>({...i, amount:i.amount||'', unit:i.unit||'days'}));
+  normalized.consumption = normalized.consumption.map(i=>({...i, estimate:i.estimate||i.estimateDays||'', unit:i.unit||'days'}));
   return normalized;
 }
 function saveData(){localStorage.setItem(STORAGE_KEY,JSON.stringify(data));renderAll()}
@@ -36,14 +37,15 @@ function fillSelects(){
   const apptMasters=data.masterItems.filter(i=>i.type==='appointment').sort((a,b)=>a.name.localeCompare(b.name,'de'));
   el('apptItemSelect').innerHTML='<option value="">Termin auswählen oder neu eingeben</option>'+apptMasters.map(i=>`<option value="${i.id}">${escapeHTML(i.name)}</option>`).join('');
 }
-function applyMasterToConsumption(){const m=masterById(el('consItemSelect').value);if(!m)return;el('consCategorySelect').value=m.category||'Sonstiges';el('consEstimate').value=m.estimate||'';el('consAmount').value=m.amount||'';el('consNewName').value=''}
+function applyMasterToConsumption(){const m=masterById(el('consItemSelect').value);if(!m)return;el('consCategorySelect').value=m.category||'Sonstiges';el('consEstimate').value=m.estimate||'';el('consUnit').value=m.unit||'days';el('consAmount').value=m.amount||'';el('consNewName').value=''}
 function applyMasterToAppointment(){const m=masterById(el('apptItemSelect').value);if(!m)return;el('apptCategorySelect').value=m.category||'Sonstiges';el('apptInterval').value=m.estimate||'';el('apptUnit').value=m.unit||'months';el('apptNewName').value=''}
 
 function averageConsumptionDays(name){
   const finished=data.consumption.filter(i=>i.name===name&&i.openedDate&&i.finishedDate).map(i=>daysBetween(i.openedDate,i.finishedDate)).filter(n=>n>=0);
   if(!finished.length)return null;return finished.reduce((a,b)=>a+b,0)/finished.length;
 }
-function prediction(item){if(!item.openedDate||item.finishedDate)return null;const avg=averageConsumptionDays(item.name)||Number(item.estimateDays)||null;return avg?addInterval(item.openedDate,Math.round(avg),'days'):null}
+function prediction(item){if(!item.openedDate||item.finishedDate)return null;const avg=averageConsumptionDays(item.name);if(avg)return addInterval(item.openedDate,Math.round(avg),'days');const estimate=Number(item.estimate||item.estimateDays);return estimate?addInterval(item.openedDate,estimate,item.unit||'days'):null}
+function consumptionEstimateLabel(item,avg){if(avg)return `Durchschnitt: ${avg.toFixed(1)} Tage`;const estimate=item.estimate||item.estimateDays;return estimate?`Schätzung: ${estimate} ${unitLabel(item.unit||'days')}`:'Schätzung: keine'}
 
 function renderConsumption(){
   const filter=el('consFilter').value;let items=[...data.consumption];
@@ -52,7 +54,7 @@ function renderConsumption(){
   const list=el('consList');list.innerHTML=items.length?'':'<p class="muted-empty">Noch keine Verbrauchseinträge.</p>';
   items.forEach(item=>{const avg=averageConsumptionDays(item.name);const pred=prediction(item);const left=pred?daysBetween(todayISO(),pred):'';const c=document.createElement('div');c.className='card';c.innerHTML=`
     <div class="card-head"><div><div class="card-title">${escapeHTML(item.name)}</div><div class="meta">${escapeHTML(item.category||'Sonstiges')} · ${escapeHTML(item.amount||'ohne Menge')}</div></div>${item.finishedDate?'<span class="badge">aufgebraucht</span>':badgeForDays(left)}</div>
-    <div class="meta">Geöffnet/gestartet: ${fmt(item.openedDate)}<br>${item.finishedDate?`Leer/erledigt: ${fmt(item.finishedDate)}<br>`:''}${pred&&!item.finishedDate?`Voraussichtlich leer: ${fmt(pred)}<br>`:''}${avg?`Durchschnitt: ${avg.toFixed(1)} Tage`:`Schätzung: ${item.estimateDays||'keine'} Tage`}</div>
+    <div class="meta">Geöffnet/gestartet: ${fmt(item.openedDate)}<br>${item.finishedDate?`Leer/erledigt: ${fmt(item.finishedDate)}<br>`:''}${pred&&!item.finishedDate?`Voraussichtlich leer: ${fmt(pred)}<br>`:''}${consumptionEstimateLabel(item,avg)}</div>
     <div class="card-actions">${!item.finishedDate?`<button class="small-btn" data-action="finish-cons-today" data-id="${item.id}">Heute leer</button><button class="small-btn" data-action="finish-cons-date" data-id="${item.id}">Leer am Datum</button>`:''}<button class="small-btn edit-btn" data-action="edit-cons" data-id="${item.id}">Bearbeiten</button><button class="small-btn delete-btn" data-action="delete-cons" data-id="${item.id}">Löschen</button></div>`;list.appendChild(c)})
 }
 function renderAppointments(){
@@ -83,7 +85,7 @@ function renderDashboard(){
 }
 function renderAll(){fillSelects();renderConsumption();renderAppointments();renderGoals();renderMaster();renderDashboard()}
 
-function getConsumptionForm(){const m=masterById(el('consItemSelect').value);const name=el('consNewName').value.trim()||m?.name;if(!name)return null;const category=categoryValue('consCategorySelect','consNewCategory')||m?.category||'Sonstiges';const estimate=el('consEstimate').value||m?.estimate||'';const amount=el('consAmount').value.trim()||m?.amount||'';if(!data.masterItems.some(i=>i.type==='consumption'&&i.name===name))data.masterItems.push({id:uid(),type:'consumption',name,category,amount,estimate,unit:'days',note:''});return {id:uid(),name,category,amount,openedDate:el('consOpened').value||'',estimateDays:estimate,finishedDate:null,createdAt:Date.now()}}
+function getConsumptionForm(){const m=masterById(el('consItemSelect').value);const name=el('consNewName').value.trim()||m?.name;if(!name)return null;const category=categoryValue('consCategorySelect','consNewCategory')||m?.category||'Sonstiges';const estimate=el('consEstimate').value||m?.estimate||'';const unit=el('consUnit').value||m?.unit||'days';const amount=el('consAmount').value.trim()||m?.amount||'';if(!data.masterItems.some(i=>i.type==='consumption'&&i.name===name))data.masterItems.push({id:uid(),type:'consumption',name,category,amount,estimate,unit,note:''});return {id:uid(),name,category,amount,openedDate:el('consOpened').value||'',estimate,unit,finishedDate:null,createdAt:Date.now()}}
 function getAppointmentForm(){const m=masterById(el('apptItemSelect').value);const name=el('apptNewName').value.trim()||m?.name;if(!name)return null;const category=categoryValue('apptCategorySelect','apptNewCategory')||m?.category||'Sonstiges';const interval=el('apptInterval').value||m?.estimate||6;const unit=el('apptUnit').value||m?.unit||'months';if(!data.masterItems.some(i=>i.type==='appointment'&&i.name===name))data.masterItems.push({id:uid(),type:'appointment',name,category,estimate:interval,unit,note:''});return {id:uid(),name,category,lastDate:el('apptLastDate').value||'',interval,unit,bookedDate:el('apptBookedDate').value||'',createdAt:Date.now()}}
 
 
@@ -146,7 +148,7 @@ document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>
 document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.view').forEach(v=>v.classList.remove('active-view'));btn.classList.add('active');el(btn.dataset.view).classList.add('active-view')}));
 el('backupToggle').addEventListener('click',()=>el('backupMenu').classList.toggle('open'));document.addEventListener('click',e=>{if(!e.target.closest('.toolbar'))el('backupMenu').classList.remove('open')});
 el('consItemSelect').addEventListener('change',applyMasterToConsumption);el('apptItemSelect').addEventListener('change',applyMasterToAppointment);el('consFilter').addEventListener('change',renderConsumption);
-el('addConsBtn').addEventListener('click',()=>{const item=getConsumptionForm();if(!item)return alert('Bitte Artikel auswählen oder neuen Namen eingeben.');data.consumption.push(item);clear(['consItemSelect','consNewName','consNewCategory','consAmount','consOpened','consEstimate']);saveData()});
+el('addConsBtn').addEventListener('click',()=>{const item=getConsumptionForm();if(!item)return alert('Bitte Artikel auswählen oder neuen Namen eingeben.');data.consumption.push(item);clear(['consItemSelect','consNewName','consNewCategory','consAmount','consOpened','consEstimate']);el('consUnit').value='days';saveData()});
 el('addApptBtn').addEventListener('click',()=>{const item=getAppointmentForm();if(!item)return alert('Bitte Termin auswählen oder neuen Namen eingeben.');data.appointments.push(item);clear(['apptItemSelect','apptNewName','apptNewCategory','apptLastDate','apptInterval','apptBookedDate']);saveData()});
 el('addGoalBtn').addEventListener('click',()=>{if(!el('goalName').value.trim())return alert('Bitte Zielnamen eingeben.');data.goals.push({id:uid(),name:el('goalName').value.trim(),category:categoryValue('goalCategorySelect','goalNewCategory'),start:el('goalStart').value||0,current:el('goalCurrent').value||0,target:el('goalTarget').value||100,monthly:el('goalMonthly').value||'',createdAt:Date.now()});clear(['goalName','goalNewCategory','goalStart','goalCurrent','goalTarget','goalMonthly']);saveData()});
 el('addMasterBtn').addEventListener('click',()=>{if(!el('masterName').value.trim())return alert('Bitte Namen eingeben.');data.masterItems.push({id:uid(),name:el('masterName').value.trim(),type:el('masterType').value,category:categoryValue('masterCategorySelect','masterNewCategory'),amount:el('masterAmount').value.trim(),estimate:el('masterEstimate').value||'',unit:el('masterUnit').value,note:el('masterNote').value.trim(),createdAt:Date.now()});clear(['masterName','masterNewCategory','masterAmount','masterEstimate','masterNote']);saveData()});
@@ -155,7 +157,7 @@ document.body.addEventListener('click',e=>{const btn=e.target.closest('button[da
  if(action==='finish-cons-today')data.consumption=data.consumption.map(i=>i.id===id?{...i,finishedDate:todayISO(),openedDate:i.openedDate||todayISO()}:i);
  if(action==='finish-cons-date'){const i=data.consumption.find(x=>x.id===id);if(!i)return;openEditModal('Leer/erledigt am Datum',[{key:'finishedDate',label:'Leer/erledigt am',type:'date',value:i.finishedDate||todayISO()}],v=>{i.finishedDate=v.finishedDate;i.openedDate=i.openedDate||v.finishedDate;});return;}
  if(action==='delete-cons')data.consumption=data.consumption.filter(i=>i.id!==id);
- if(action==='edit-cons'){const i=data.consumption.find(x=>x.id===id);if(!i)return;openEditModal('Verbrauch bearbeiten',[{key:'name',label:'Name',value:i.name},{key:'category',label:'Kategorie',type:'select',value:i.category||'Sonstiges',options:categoryOptions(i.category)},{key:'amount',label:'Menge',value:i.amount||''},{key:'openedDate',label:'Geöffnet/gestartet',type:'date',value:i.openedDate||''},{key:'estimateDays',label:'Grobe Schätzung in Tagen',type:'number',min:'1',value:i.estimateDays||''},{key:'finishedDate',label:'Leer/erledigt am',type:'date',value:i.finishedDate||''}],v=>{i.name=v.name.trim()||i.name;i.category=v.category||'Sonstiges';i.amount=v.amount.trim();i.openedDate=v.openedDate;i.estimateDays=v.estimateDays;i.finishedDate=v.finishedDate;});return;}
+ if(action==='edit-cons'){const i=data.consumption.find(x=>x.id===id);if(!i)return;openEditModal('Verbrauch bearbeiten',[{key:'name',label:'Name',value:i.name},{key:'category',label:'Kategorie',type:'select',value:i.category||'Sonstiges',options:categoryOptions(i.category)},{key:'amount',label:'Menge',value:i.amount||''},{key:'openedDate',label:'Geöffnet/gestartet',type:'date',value:i.openedDate||''},{key:'estimate',label:'Grobe Schätzung / Intervall',type:'number',min:'1',value:i.estimate||i.estimateDays||''},{key:'unit',label:'Einheit',type:'select',value:i.unit||'days',options:unitOptions()},{key:'finishedDate',label:'Leer/erledigt am',type:'date',value:i.finishedDate||''}],v=>{i.name=v.name.trim()||i.name;i.category=v.category||'Sonstiges';i.amount=v.amount.trim();i.openedDate=v.openedDate;i.estimate=v.estimate;i.unit=v.unit||'days';delete i.estimateDays;i.finishedDate=v.finishedDate;});return;}
  if(action==='done-appt-today')data.appointments=data.appointments.map(i=>i.id===id?{...i,lastDate:todayISO(),bookedDate:''}:i);
  if(action==='done-appt-date'){const i=data.appointments.find(x=>x.id===id);if(!i)return;openEditModal('Termin erledigt am Datum',[{key:'lastDate',label:'Erledigt am',type:'date',value:i.lastDate||todayISO()}],v=>{i.lastDate=v.lastDate;i.bookedDate='';});return;}
  if(action==='book-appt'){const i=data.appointments.find(x=>x.id===id);if(!i)return;openEditModal('Neuer Termin vereinbart',[{key:'bookedDate',label:'Vereinbart am',type:'date',value:i.bookedDate||todayISO()}],v=>{i.bookedDate=v.bookedDate;});return;}

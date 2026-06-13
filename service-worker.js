@@ -1,4 +1,4 @@
-const cacheName = 'life-tracker-v6';
+const cacheName = 'life-tracker-v7';
 const assetsToCache = ['./','./index.html','./style.css','./app.js','./manifest.json'];
 self.addEventListener('install', event => {
   self.skipWaiting();
