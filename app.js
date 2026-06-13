@@ -143,61 +143,6 @@ function categoryOptions(current){
 function unitOptions(){return [{value:'days',label:'Tage'},{value:'weeks',label:'Wochen'},{value:'months',label:'Monate'},{value:'years',label:'Jahre'}]}
 
 document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{
-function openEditModal(title, fields, onSave){
-  let overlay=document.getElementById('editModalOverlay');
-  if(!overlay){
-    overlay=document.createElement('div');
-    overlay.id='editModalOverlay';
-    overlay.className='modal-overlay';
-    document.body.appendChild(overlay);
-  }
-  overlay.innerHTML=`
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="editModalTitle">
-      <div class="modal-head">
-        <h2 id="editModalTitle">${escapeHTML(title)}</h2>
-        <button class="modal-close" type="button" aria-label="Schließen">×</button>
-      </div>
-      <div class="modal-grid">
-        ${fields.map((f,idx)=>{
-          const id='modalField'+idx;
-          const value=escapeHTML(f.value ?? '');
-          const label=`<label for="${id}">${escapeHTML(f.label)}</label>`;
-          if(f.type==='select'){
-            return `<div class="modal-field">${label}<select id="${id}" data-key="${escapeHTML(f.key)}">${(f.options||[]).map(o=>`<option value="${escapeHTML(o.value)}" ${String(o.value)===String(f.value)?'selected':''}>${escapeHTML(o.label)}</option>`).join('')}</select></div>`;
-          }
-          if(f.type==='textarea'){
-            return `<div class="modal-field full">${label}<textarea id="${id}" data-key="${escapeHTML(f.key)}" rows="3">${value}</textarea></div>`;
-          }
-          return `<div class="modal-field">${label}<input id="${id}" data-key="${escapeHTML(f.key)}" type="${escapeHTML(f.type||'text')}" ${f.step?`step="${escapeHTML(f.step)}"`:''} ${f.min?`min="${escapeHTML(f.min)}"`:''} value="${value}" /></div>`;
-        }).join('')}
-      </div>
-      <div class="modal-actions">
-        <button class="small-btn" type="button" data-modal-cancel>Abbrechen</button>
-        <button class="primary-btn modal-save" type="button">Speichern</button>
-      </div>
-    </div>`;
-  overlay.classList.add('show');
-  const close=()=>overlay.classList.remove('show');
-  overlay.querySelector('.modal-close').addEventListener('click',close);
-  overlay.querySelector('[data-modal-cancel]').addEventListener('click',close);
-  overlay.addEventListener('click',e=>{if(e.target===overlay)close()},{once:true});
-  overlay.querySelector('.modal-save').addEventListener('click',()=>{
-    const values={};
-    overlay.querySelectorAll('[data-key]').forEach(input=>{values[input.dataset.key]=input.value});
-    onSave(values);
-    close();
-    saveData();
-  });
-  const first=overlay.querySelector('input,select,textarea');
-  if(first)first.focus();
-}
-function categoryOptions(current){
-  const cats=[...data.categories];
-  if(current && !cats.includes(current))cats.unshift(current);
-  return cats.map(c=>({value:c,label:c}));
-}
-function unitOptions(){return [{value:'days',label:'Tage'},{value:'weeks',label:'Wochen'},{value:'months',label:'Monate'},{value:'years',label:'Jahre'}]}
-
 document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.view').forEach(v=>v.classList.remove('active-view'));btn.classList.add('active');el(btn.dataset.view).classList.add('active-view')}));
 el('backupToggle').addEventListener('click',()=>el('backupMenu').classList.toggle('open'));document.addEventListener('click',e=>{if(!e.target.closest('.toolbar'))el('backupMenu').classList.remove('open')});
 el('consItemSelect').addEventListener('change',applyMasterToConsumption);el('apptItemSelect').addEventListener('change',applyMasterToAppointment);el('consFilter').addEventListener('change',renderConsumption);
@@ -208,12 +153,12 @@ el('addMasterBtn').addEventListener('click',()=>{if(!el('masterName').value.trim
 
 document.body.addEventListener('click',e=>{const btn=e.target.closest('button[data-action]');if(!btn)return;const {action,id}=btn.dataset;
  if(action==='finish-cons-today')data.consumption=data.consumption.map(i=>i.id===id?{...i,finishedDate:todayISO(),openedDate:i.openedDate||todayISO()}:i);
- if(action==='finish-cons-date'){const i=data.consumption.find(x=>x.id===id);const d=prompt('Leer/erledigt am (JJJJ-MM-TT):',i.finishedDate||todayISO());if(d)data.consumption=data.consumption.map(x=>x.id===id?{...x,finishedDate:d,openedDate:x.openedDate||d}:x)}
+ if(action==='finish-cons-date'){const i=data.consumption.find(x=>x.id===id);if(!i)return;openEditModal('Leer/erledigt am Datum',[{key:'finishedDate',label:'Leer/erledigt am',type:'date',value:i.finishedDate||todayISO()}],v=>{i.finishedDate=v.finishedDate;i.openedDate=i.openedDate||v.finishedDate;});return;}
  if(action==='delete-cons')data.consumption=data.consumption.filter(i=>i.id!==id);
  if(action==='edit-cons'){const i=data.consumption.find(x=>x.id===id);if(!i)return;openEditModal('Verbrauch bearbeiten',[{key:'name',label:'Name',value:i.name},{key:'category',label:'Kategorie',type:'select',value:i.category||'Sonstiges',options:categoryOptions(i.category)},{key:'amount',label:'Menge',value:i.amount||''},{key:'openedDate',label:'Geöffnet/gestartet',type:'date',value:i.openedDate||''},{key:'estimateDays',label:'Grobe Schätzung in Tagen',type:'number',min:'1',value:i.estimateDays||''},{key:'finishedDate',label:'Leer/erledigt am',type:'date',value:i.finishedDate||''}],v=>{i.name=v.name.trim()||i.name;i.category=v.category||'Sonstiges';i.amount=v.amount.trim();i.openedDate=v.openedDate;i.estimateDays=v.estimateDays;i.finishedDate=v.finishedDate;});return;}
  if(action==='done-appt-today')data.appointments=data.appointments.map(i=>i.id===id?{...i,lastDate:todayISO(),bookedDate:''}:i);
- if(action==='done-appt-date'){const i=data.appointments.find(x=>x.id===id);const d=prompt('Erledigt am (JJJJ-MM-TT):',i.lastDate||todayISO());if(d)data.appointments=data.appointments.map(x=>x.id===id?{...x,lastDate:d,bookedDate:''}:x)}
- if(action==='book-appt'){const i=data.appointments.find(x=>x.id===id);const d=prompt('Neuer Termin ist vereinbart am (JJJJ-MM-TT):',i.bookedDate||todayISO());if(d)data.appointments=data.appointments.map(x=>x.id===id?{...x,bookedDate:d}:x)}
+ if(action==='done-appt-date'){const i=data.appointments.find(x=>x.id===id);if(!i)return;openEditModal('Termin erledigt am Datum',[{key:'lastDate',label:'Erledigt am',type:'date',value:i.lastDate||todayISO()}],v=>{i.lastDate=v.lastDate;i.bookedDate='';});return;}
+ if(action==='book-appt'){const i=data.appointments.find(x=>x.id===id);if(!i)return;openEditModal('Neuer Termin vereinbart',[{key:'bookedDate',label:'Vereinbart am',type:'date',value:i.bookedDate||todayISO()}],v=>{i.bookedDate=v.bookedDate;});return;}
  if(action==='edit-appt'){const i=data.appointments.find(x=>x.id===id);if(!i)return;openEditModal('Termin bearbeiten',[{key:'name',label:'Name',value:i.name},{key:'category',label:'Kategorie',type:'select',value:i.category||'Sonstiges',options:categoryOptions(i.category)},{key:'lastDate',label:'Letztes Mal / erledigt am',type:'date',value:i.lastDate||''},{key:'interval',label:'Intervall',type:'number',min:'1',value:i.interval||''},{key:'unit',label:'Einheit',type:'select',value:i.unit||'months',options:unitOptions()},{key:'bookedDate',label:'Neuer Termin ist vereinbart am',type:'date',value:i.bookedDate||''}],v=>{i.name=v.name.trim()||i.name;i.category=v.category||'Sonstiges';i.lastDate=v.lastDate;i.interval=v.interval;i.unit=v.unit;i.bookedDate=v.bookedDate;});return;}
  if(action==='delete-appt')data.appointments=data.appointments.filter(i=>i.id!==id);
  if(action==='update-goal'){const g=data.goals.find(i=>i.id===id);if(!g)return;openEditModal('Aktuellen Zielwert ändern',[{key:'current',label:'Aktueller Wert',type:'number',step:'0.01',value:g.current||''}],v=>{g.current=v.current});return;}
