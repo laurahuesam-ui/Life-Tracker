@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zeit & Verbrauch</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#6b8f71" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Life Tracker</p>
+        <h1>Zeit & Verbrauch</h1>
+        <p class="subtitle">Erfasse, wie lange Dinge halten, wann Termine fällig sind und wie Ziele vorankommen.</p>
+      </div>
+      <div class="toolbar">
+        <button class="ghost-btn" id="backupToggle">Backup ▾</button>
+        <div class="menu" id="backupMenu">
+          <button id="exportBackupBtn">Backup exportieren</button>
+          <label class="file-label" for="importBackupInput">Backup importieren</label>
+          <input id="importBackupInput" type="file" accept="application/json" hidden />
+        </div>
+      </div>
+    </header>
+
+    <nav class="tabs" aria-label="Bereiche">
+      <button class="tab active" data-view="dashboard">Dashboard</button>
+      <button class="tab" data-view="consumption">Verbrauch</button>
+      <button class="tab" data-view="appointments">Termine</button>
+      <button class="tab" data-view="goals">Ziele</button>
+      <button class="tab" data-view="activities">Aktivitäten</button>
+    </nav>
+
+    <main>
+      <section id="dashboard" class="view active-view">
+        <div class="grid three">
+          <article class="panel">
+            <h2>Bald leer</h2>
+            <div id="soonEmpty" class="stack muted-empty">Noch keine Verbrauchsdaten.</div>
+          </article>
+          <article class="panel">
+            <h2>Bald fällig</h2>
+            <div id="soonDue" class="stack muted-empty">Noch keine Termine.</div>
+          </article>
+          <article class="panel">
+            <h2>Ziele</h2>
+            <div id="goalSummary" class="stack muted-empty">Noch keine Ziele.</div>
+          </article>
+        </div>
+        <article class="panel wide">
+          <h2>Aktivität diese Woche</h2>
+          <div id="activitySummary" class="summary-line">Noch keine Aktivitäten eingetragen.</div>
+        </article>
+      </section>
+
+      <section id="consumption" class="view">
+        <article class="panel">
+          <h2>Verbrauch hinzufügen</h2>
+          <div class="form-grid">
+            <input id="consName" placeholder="Name, z. B. Milch" />
+            <input id="consCategory" placeholder="Kategorie, z. B. Lebensmittel" />
+            <input id="consAmount" placeholder="Menge, z. B. 1 l / 500 ml" />
+            <input id="consBought" type="date" />
+          </div>
+          <button id="addConsBtn" class="primary-btn">Hinzufügen</button>
+        </article>
+        <article class="panel">
+          <div class="section-head">
+            <h2>Verbrauchsliste</h2>
+            <select id="consFilter">
+              <option value="active">Aktiv</option>
+              <option value="all">Alle</option>
+              <option value="finished">Aufgebraucht</option>
+            </select>
+          </div>
+          <div id="consList" class="cards"></div>
+        </article>
+      </section>
+
+      <section id="appointments" class="view">
+        <article class="panel">
+          <h2>Termin hinzufügen</h2>
+          <div class="form-grid">
+            <input id="apptName" placeholder="Name, z. B. Zahnarzt" />
+            <input id="apptDate" type="date" />
+            <input id="apptInterval" type="number" min="1" placeholder="Intervall" />
+            <select id="apptUnit">
+              <option value="days">Tage</option>
+              <option value="weeks">Wochen</option>
+              <option value="months" selected>Monate</option>
+              <option value="years">Jahre</option>
+            </select>
+          </div>
+          <button id="addApptBtn" class="primary-btn">Hinzufügen</button>
+        </article>
+        <article class="panel">
+          <h2>Termine</h2>
+          <div id="apptList" class="cards"></div>
+        </article>
+      </section>
+
+      <section id="goals" class="view">
+        <article class="panel">
+          <h2>Ziel hinzufügen</h2>
+          <div class="form-grid">
+            <input id="goalName" placeholder="Name, z. B. Notgroschen" />
+            <input id="goalStart" type="number" step="0.01" placeholder="Startwert" />
+            <input id="goalCurrent" type="number" step="0.01" placeholder="Aktuell" />
+            <input id="goalTarget" type="number" step="0.01" placeholder="Zielwert" />
+          </div>
+          <button id="addGoalBtn" class="primary-btn">Hinzufügen</button>
+        </article>
+        <article class="panel">
+          <h2>Ziele</h2>
+          <div id="goalList" class="cards"></div>
+        </article>
+      </section>
+
+      <section id="activities" class="view">
+        <article class="panel">
+          <h2>Aktivität hinzufügen</h2>
+          <div class="form-grid">
+            <input id="actName" placeholder="Name, z. B. Reiten" />
+            <input id="actDate" type="date" />
+            <input id="actMinutes" type="number" min="1" placeholder="Minuten" />
+            <input id="actNote" placeholder="Notiz optional" />
+          </div>
+          <button id="addActBtn" class="primary-btn">Hinzufügen</button>
+        </article>
+        <article class="panel">
+          <h2>Aktivitäten</h2>
+          <div id="actList" class="cards"></div>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./service-worker.js');
+    }
+  </script>
+</body>
+</html>
