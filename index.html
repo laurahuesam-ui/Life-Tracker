@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Zeit & Verbrauch</title>
+  <title>Life Tracker</title>
   <link rel="stylesheet" href="style.css" />
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#6b8f71" />
@@ -13,8 +13,8 @@
     <header class="hero">
       <div>
         <p class="eyebrow">Life Tracker</p>
-        <h1>Zeit & Verbrauch</h1>
-        <p class="subtitle">Erfasse, wie lange Dinge halten, wann Termine fällig sind und wie Ziele vorankommen.</p>
+        <h1>Life Tracker</h1>
+        <p class="subtitle">Erfasse, wie lange Dinge halten, wann etwas wieder fällig ist und wie Ziele vorankommen.</p>
       </div>
       <div class="toolbar">
         <button class="ghost-btn" id="backupToggle">Backup ▾</button>
@@ -31,118 +31,95 @@
       <button class="tab" data-view="consumption">Verbrauch</button>
       <button class="tab" data-view="appointments">Termine</button>
       <button class="tab" data-view="goals">Ziele</button>
-      <button class="tab" data-view="activities">Aktivitäten</button>
+      <button class="tab" data-view="masterdata">Stammdaten</button>
     </nav>
 
     <main>
       <section id="dashboard" class="view active-view">
         <div class="grid three">
-          <article class="panel">
-            <h2>Bald leer</h2>
-            <div id="soonEmpty" class="stack muted-empty">Noch keine Verbrauchsdaten.</div>
-          </article>
-          <article class="panel">
-            <h2>Bald fällig</h2>
-            <div id="soonDue" class="stack muted-empty">Noch keine Termine.</div>
-          </article>
-          <article class="panel">
-            <h2>Ziele</h2>
-            <div id="goalSummary" class="stack muted-empty">Noch keine Ziele.</div>
-          </article>
+          <article class="panel"><h2>Bald leer</h2><div id="soonEmpty" class="stack"></div></article>
+          <article class="panel"><h2>Bald fällig</h2><div id="soonDue" class="stack"></div></article>
+          <article class="panel"><h2>Ziele</h2><div id="goalSummary" class="stack"></div></article>
         </div>
-        <article class="panel wide">
-          <h2>Aktivität diese Woche</h2>
-          <div id="activitySummary" class="summary-line">Noch keine Aktivitäten eingetragen.</div>
-        </article>
       </section>
 
       <section id="consumption" class="view">
         <article class="panel">
-          <h2>Verbrauch hinzufügen</h2>
+          <h2>Verbrauch erfassen</h2>
+          <p class="hint">Wähle einen gespeicherten Artikel aus oder lege ihn direkt neu an. „Geöffnet/gestartet“ kann leer bleiben.</p>
           <div class="form-grid">
-            <input id="consName" placeholder="Name, z. B. Milch" />
-            <input id="consCategory" placeholder="Kategorie, z. B. Lebensmittel" />
-            <input id="consAmount" placeholder="Menge, z. B. 1 l / 500 ml" />
-            <input id="consBought" type="date" />
+            <select id="consItemSelect"></select>
+            <input id="consNewName" placeholder="Neuer Artikel, z. B. Milch" />
+            <select id="consCategorySelect"></select>
+            <input id="consNewCategory" placeholder="Neue Kategorie" />
+            <input id="consAmount" placeholder="Menge, z. B. 1 l" />
+            <input id="consOpened" type="date" title="Geöffnet/gestartet" />
+            <input id="consEstimate" type="number" min="1" placeholder="Schätzung in Tagen" />
           </div>
-          <button id="addConsBtn" class="primary-btn">Hinzufügen</button>
+          <button id="addConsBtn" class="primary-btn">Speichern</button>
         </article>
         <article class="panel">
-          <div class="section-head">
-            <h2>Verbrauchsliste</h2>
-            <select id="consFilter">
-              <option value="active">Aktiv</option>
-              <option value="all">Alle</option>
-              <option value="finished">Aufgebraucht</option>
-            </select>
-          </div>
+          <div class="section-head"><h2>Verbrauchsliste</h2><select id="consFilter"><option value="active">Aktiv</option><option value="all">Alle</option><option value="finished">Aufgebraucht</option><option value="nodate">Ohne Datum</option></select></div>
           <div id="consList" class="cards"></div>
         </article>
       </section>
 
       <section id="appointments" class="view">
         <article class="panel">
-          <h2>Termin hinzufügen</h2>
+          <h2>Termin erfassen</h2>
           <div class="form-grid">
-            <input id="apptName" placeholder="Name, z. B. Zahnarzt" />
-            <input id="apptDate" type="date" />
+            <select id="apptItemSelect"></select>
+            <input id="apptNewName" placeholder="Neuer Termin, z. B. Zahnarzt" />
+            <select id="apptCategorySelect"></select>
+            <input id="apptNewCategory" placeholder="Neue Kategorie" />
+            <input id="apptLastDate" type="date" title="Letztes Mal / erledigt am" />
             <input id="apptInterval" type="number" min="1" placeholder="Intervall" />
-            <select id="apptUnit">
-              <option value="days">Tage</option>
-              <option value="weeks">Wochen</option>
-              <option value="months" selected>Monate</option>
-              <option value="years">Jahre</option>
-            </select>
+            <select id="apptUnit"><option value="days">Tage</option><option value="weeks">Wochen</option><option value="months" selected>Monate</option><option value="years">Jahre</option></select>
+            <input id="apptBookedDate" type="date" title="Schon vereinbart am" />
           </div>
-          <button id="addApptBtn" class="primary-btn">Hinzufügen</button>
+          <button id="addApptBtn" class="primary-btn">Speichern</button>
         </article>
-        <article class="panel">
-          <h2>Termine</h2>
-          <div id="apptList" class="cards"></div>
-        </article>
+        <article class="panel"><h2>Termine</h2><div id="apptList" class="cards"></div></article>
       </section>
 
       <section id="goals" class="view">
         <article class="panel">
-          <h2>Ziel hinzufügen</h2>
+          <h2>Ziel erfassen</h2>
           <div class="form-grid">
             <input id="goalName" placeholder="Name, z. B. Notgroschen" />
+            <select id="goalCategorySelect"></select>
+            <input id="goalNewCategory" placeholder="Neue Kategorie" />
             <input id="goalStart" type="number" step="0.01" placeholder="Startwert" />
             <input id="goalCurrent" type="number" step="0.01" placeholder="Aktuell" />
             <input id="goalTarget" type="number" step="0.01" placeholder="Zielwert" />
+            <input id="goalMonthly" type="number" step="0.01" placeholder="Schätzung pro Monat" />
           </div>
-          <button id="addGoalBtn" class="primary-btn">Hinzufügen</button>
+          <button id="addGoalBtn" class="primary-btn">Speichern</button>
         </article>
-        <article class="panel">
-          <h2>Ziele</h2>
-          <div id="goalList" class="cards"></div>
-        </article>
+        <article class="panel"><h2>Ziele</h2><div id="goalList" class="cards"></div></article>
       </section>
 
-      <section id="activities" class="view">
+      <section id="masterdata" class="view">
         <article class="panel">
-          <h2>Aktivität hinzufügen</h2>
+          <h2>Stammdaten anlegen</h2>
+          <p class="hint">Hier kannst du Dinge vorab speichern, auch ohne Datum. Danach tauchen sie in den Auswahlfeldern auf.</p>
           <div class="form-grid">
-            <input id="actName" placeholder="Name, z. B. Reiten" />
-            <input id="actDate" type="date" />
-            <input id="actMinutes" type="number" min="1" placeholder="Minuten" />
-            <input id="actNote" placeholder="Notiz optional" />
+            <input id="masterName" placeholder="Name" />
+            <select id="masterType"><option value="consumption">Verbrauch</option><option value="appointment">Termin</option></select>
+            <select id="masterCategorySelect"></select>
+            <input id="masterNewCategory" placeholder="Neue Kategorie" />
+            <input id="masterEstimate" type="number" min="1" placeholder="Schätzung/Intervall" />
+            <select id="masterUnit"><option value="days">Tage</option><option value="weeks">Wochen</option><option value="months" selected>Monate</option><option value="years">Jahre</option></select>
+            <input id="masterNote" placeholder="Notiz optional" />
           </div>
-          <button id="addActBtn" class="primary-btn">Hinzufügen</button>
+          <button id="addMasterBtn" class="primary-btn">Stammdatum speichern</button>
         </article>
-        <article class="panel">
-          <h2>Aktivitäten</h2>
-          <div id="actList" class="cards"></div>
-        </article>
+        <article class="panel"><h2>Gespeicherte Stammdaten</h2><div id="masterList" class="cards"></div></article>
       </section>
     </main>
   </div>
 
   <script src="app.js"></script>
-  <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./service-worker.js');
-    }
-  </script>
+  <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js');</script>
 </body>
 </html>
