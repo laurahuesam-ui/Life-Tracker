@@ -12,7 +12,11 @@ const todayISO = () => new Date().toISOString().slice(0,10);
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,8);
 
 function loadData(){try{const raw=localStorage.getItem(STORAGE_KEY)||localStorage.getItem('life_tracker_data');return raw?normalize(JSON.parse(raw)):structuredClone(defaultData)}catch{return structuredClone(defaultData)}}
-function normalize(d){return {...structuredClone(defaultData),...d,categories:d.categories?.length?d.categories:structuredClone(defaultData.categories),masterItems:d.masterItems||[],consumption:d.consumption||[],appointments:d.appointments||[],goals:d.goals||[]}}
+function normalize(d){
+  const normalized={...structuredClone(defaultData),...d,categories:d.categories?.length?d.categories:structuredClone(defaultData.categories),masterItems:d.masterItems||[],consumption:d.consumption||[],appointments:d.appointments||[],goals:d.goals||[]};
+  normalized.masterItems = normalized.masterItems.map(i=>({...i, amount:i.amount||''}));
+  return normalized;
+}
 function saveData(){localStorage.setItem(STORAGE_KEY,JSON.stringify(data));renderAll()}
 function escapeHTML(s){return String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
 function fmt(date){return date?new Date(date+'T00:00:00').toLocaleDateString('de-DE'):'kein Datum'}
@@ -32,7 +36,7 @@ function fillSelects(){
   const apptMasters=data.masterItems.filter(i=>i.type==='appointment').sort((a,b)=>a.name.localeCompare(b.name,'de'));
   el('apptItemSelect').innerHTML='<option value="">Termin auswählen oder neu eingeben</option>'+apptMasters.map(i=>`<option value="${i.id}">${escapeHTML(i.name)}</option>`).join('');
 }
-function applyMasterToConsumption(){const m=masterById(el('consItemSelect').value);if(!m)return;el('consCategorySelect').value=m.category||'Sonstiges';el('consEstimate').value=m.estimate||'';el('consNewName').value=''}
+function applyMasterToConsumption(){const m=masterById(el('consItemSelect').value);if(!m)return;el('consCategorySelect').value=m.category||'Sonstiges';el('consEstimate').value=m.estimate||'';el('consAmount').value=m.amount||'';el('consNewName').value=''}
 function applyMasterToAppointment(){const m=masterById(el('apptItemSelect').value);if(!m)return;el('apptCategorySelect').value=m.category||'Sonstiges';el('apptInterval').value=m.estimate||'';el('apptUnit').value=m.unit||'months';el('apptNewName').value=''}
 
 function averageConsumptionDays(name){
@@ -68,7 +72,7 @@ function renderGoals(){
 }
 function renderMaster(){
   const list=el('masterList');list.innerHTML=data.masterItems.length?'':'<p class="muted-empty">Noch keine Stammdaten.</p>';
-  data.masterItems.slice().sort((a,b)=>a.name.localeCompare(b.name,'de')).forEach(item=>{const c=document.createElement('div');c.className='card';c.innerHTML=`<div class="card-head"><div><div class="card-title">${escapeHTML(item.name)}</div><div class="meta">${item.type==='consumption'?'Verbrauch':'Termin'} · ${escapeHTML(item.category||'Sonstiges')}</div></div><span class="badge">${item.estimate||'-'} ${unitLabel(item.unit||'days')}</span></div>${item.note?`<div class="meta">${escapeHTML(item.note)}</div>`:''}<div class="card-actions"><button class="small-btn edit-btn" data-action="edit-master" data-id="${item.id}">Bearbeiten</button><button class="small-btn delete-btn" data-action="delete-master" data-id="${item.id}">Löschen</button></div>`;list.appendChild(c)})
+  data.masterItems.slice().sort((a,b)=>a.name.localeCompare(b.name,'de')).forEach(item=>{const c=document.createElement('div');c.className='card';c.innerHTML=`<div class="card-head"><div><div class="card-title">${escapeHTML(item.name)}</div><div class="meta">${item.type==='consumption'?'Verbrauch':'Termin'} · ${escapeHTML(item.category||'Sonstiges')}${item.type==='consumption'&&item.amount?' · Menge: '+escapeHTML(item.amount):''}</div></div><span class="badge">${item.estimate||'-'} ${unitLabel(item.unit||'days')}</span></div>${item.note?`<div class="meta">${escapeHTML(item.note)}</div>`:''}<div class="card-actions"><button class="small-btn edit-btn" data-action="edit-master" data-id="${item.id}">Bearbeiten</button><button class="small-btn delete-btn" data-action="delete-master" data-id="${item.id}">Löschen</button></div>`;list.appendChild(c)})
 }
 function renderDashboard(){
   const active=data.consumption.filter(i=>!i.finishedDate).map(i=>({...i,pred:prediction(i)})).filter(i=>i.pred).sort((a,b)=>a.pred.localeCompare(b.pred)).slice(0,6);
@@ -79,7 +83,7 @@ function renderDashboard(){
 }
 function renderAll(){fillSelects();renderConsumption();renderAppointments();renderGoals();renderMaster();renderDashboard()}
 
-function getConsumptionForm(){const m=masterById(el('consItemSelect').value);const name=el('consNewName').value.trim()||m?.name;if(!name)return null;const category=categoryValue('consCategorySelect','consNewCategory')||m?.category||'Sonstiges';const estimate=el('consEstimate').value||m?.estimate||'';if(!data.masterItems.some(i=>i.type==='consumption'&&i.name===name))data.masterItems.push({id:uid(),type:'consumption',name,category,estimate,unit:'days',note:''});return {id:uid(),name,category,amount:el('consAmount').value.trim(),openedDate:el('consOpened').value||'',estimateDays:estimate,finishedDate:null,createdAt:Date.now()}}
+function getConsumptionForm(){const m=masterById(el('consItemSelect').value);const name=el('consNewName').value.trim()||m?.name;if(!name)return null;const category=categoryValue('consCategorySelect','consNewCategory')||m?.category||'Sonstiges';const estimate=el('consEstimate').value||m?.estimate||'';const amount=el('consAmount').value.trim()||m?.amount||'';if(!data.masterItems.some(i=>i.type==='consumption'&&i.name===name))data.masterItems.push({id:uid(),type:'consumption',name,category,amount,estimate,unit:'days',note:''});return {id:uid(),name,category,amount,openedDate:el('consOpened').value||'',estimateDays:estimate,finishedDate:null,createdAt:Date.now()}}
 function getAppointmentForm(){const m=masterById(el('apptItemSelect').value);const name=el('apptNewName').value.trim()||m?.name;if(!name)return null;const category=categoryValue('apptCategorySelect','apptNewCategory')||m?.category||'Sonstiges';const interval=el('apptInterval').value||m?.estimate||6;const unit=el('apptUnit').value||m?.unit||'months';if(!data.masterItems.some(i=>i.type==='appointment'&&i.name===name))data.masterItems.push({id:uid(),type:'appointment',name,category,estimate:interval,unit,note:''});return {id:uid(),name,category,lastDate:el('apptLastDate').value||'',interval,unit,bookedDate:el('apptBookedDate').value||'',createdAt:Date.now()}}
 
 document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.view').forEach(v=>v.classList.remove('active-view'));btn.classList.add('active');el(btn.dataset.view).classList.add('active-view')}));
@@ -88,7 +92,7 @@ el('consItemSelect').addEventListener('change',applyMasterToConsumption);el('app
 el('addConsBtn').addEventListener('click',()=>{const item=getConsumptionForm();if(!item)return alert('Bitte Artikel auswählen oder neuen Namen eingeben.');data.consumption.push(item);clear(['consItemSelect','consNewName','consNewCategory','consAmount','consOpened','consEstimate']);saveData()});
 el('addApptBtn').addEventListener('click',()=>{const item=getAppointmentForm();if(!item)return alert('Bitte Termin auswählen oder neuen Namen eingeben.');data.appointments.push(item);clear(['apptItemSelect','apptNewName','apptNewCategory','apptLastDate','apptInterval','apptBookedDate']);saveData()});
 el('addGoalBtn').addEventListener('click',()=>{if(!el('goalName').value.trim())return alert('Bitte Zielnamen eingeben.');data.goals.push({id:uid(),name:el('goalName').value.trim(),category:categoryValue('goalCategorySelect','goalNewCategory'),start:el('goalStart').value||0,current:el('goalCurrent').value||0,target:el('goalTarget').value||100,monthly:el('goalMonthly').value||'',createdAt:Date.now()});clear(['goalName','goalNewCategory','goalStart','goalCurrent','goalTarget','goalMonthly']);saveData()});
-el('addMasterBtn').addEventListener('click',()=>{if(!el('masterName').value.trim())return alert('Bitte Namen eingeben.');data.masterItems.push({id:uid(),name:el('masterName').value.trim(),type:el('masterType').value,category:categoryValue('masterCategorySelect','masterNewCategory'),estimate:el('masterEstimate').value||'',unit:el('masterUnit').value,note:el('masterNote').value.trim(),createdAt:Date.now()});clear(['masterName','masterNewCategory','masterEstimate','masterNote']);saveData()});
+el('addMasterBtn').addEventListener('click',()=>{if(!el('masterName').value.trim())return alert('Bitte Namen eingeben.');data.masterItems.push({id:uid(),name:el('masterName').value.trim(),type:el('masterType').value,category:categoryValue('masterCategorySelect','masterNewCategory'),amount:el('masterAmount').value.trim(),estimate:el('masterEstimate').value||'',unit:el('masterUnit').value,note:el('masterNote').value.trim(),createdAt:Date.now()});clear(['masterName','masterNewCategory','masterAmount','masterEstimate','masterNote']);saveData()});
 
 document.body.addEventListener('click',e=>{const btn=e.target.closest('button[data-action]');if(!btn)return;const {action,id}=btn.dataset;
  if(action==='finish-cons-today')data.consumption=data.consumption.map(i=>i.id===id?{...i,finishedDate:todayISO(),openedDate:i.openedDate||todayISO()}:i);
@@ -103,7 +107,7 @@ document.body.addEventListener('click',e=>{const btn=e.target.closest('button[da
  if(action==='update-goal'){const g=data.goals.find(i=>i.id===id);const v=prompt('Neuer aktueller Wert:',g.current);if(v!==null)g.current=v}
  if(action==='edit-goal'){const g=data.goals.find(i=>i.id===id);if(!g)return;g.name=prompt('Name:',g.name)||g.name;g.category=prompt('Kategorie:',g.category)||g.category;g.start=prompt('Startwert:',g.start)||g.start;g.current=prompt('Aktuell:',g.current)||g.current;g.target=prompt('Zielwert:',g.target)||g.target;g.monthly=prompt('Schätzung pro Monat:',g.monthly)||g.monthly;}
  if(action==='delete-goal')data.goals=data.goals.filter(i=>i.id!==id);
- if(action==='edit-master'){const m=data.masterItems.find(x=>x.id===id);if(!m)return;m.name=prompt('Name:',m.name)||m.name;m.category=prompt('Kategorie:',m.category)||m.category;m.estimate=prompt('Schätzung/Intervall:',m.estimate)||m.estimate;m.unit=prompt('Einheit: days, weeks, months, years',m.unit)||m.unit;m.note=prompt('Notiz:',m.note)||m.note;}
+ if(action==='edit-master'){const m=data.masterItems.find(x=>x.id===id);if(!m)return;m.name=prompt('Name:',m.name)||m.name;m.category=prompt('Kategorie:',m.category)||m.category;if(m.type==='consumption')m.amount=prompt('Standardmenge:',m.amount||'')||'';m.estimate=prompt('Schätzung/Intervall:',m.estimate)||m.estimate;m.unit=prompt('Einheit: days, weeks, months, years',m.unit)||m.unit;m.note=prompt('Notiz:',m.note)||m.note;}
  if(action==='delete-master')data.masterItems=data.masterItems.filter(i=>i.id!==id);
  saveData();
 });
