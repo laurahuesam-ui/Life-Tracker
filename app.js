@@ -1,4 +1,4 @@
-const APP_VERSION = 'v9';
+const APP_VERSION = 'v10';
 // Stabiler Speichername: bleibt ab jetzt bei jeder neuen Version gleich,
 // damit Updates keine Stammdaten/Einträge mehr verlieren.
 const STORAGE_KEY = 'life_tracker_data';
@@ -60,12 +60,14 @@ function normalize(d){
   const normalized={...structuredClone(defaultData),...d,categories:d.categories?.length?d.categories:structuredClone(defaultData.categories),masterItems:d.masterItems||[],consumption:d.consumption||[],appointments:d.appointments||[],goals:d.goals||[]};
   normalized.masterItems = normalized.masterItems.map(i=>({...i, amount:i.amount||'', unit:i.unit||'days', estimate:i.estimate||i.estimateDays||''}));
   normalized.consumption = normalized.consumption.map(i=>({...i, estimate:i.estimate||i.estimateDays||'', unit:i.unit||'days'}));
+  normalized.goals = normalized.goals.map(i=>({...i, dueDate:i.dueDate||i.targetDate||i.deadline||''}));
   return normalized;
 }
 function saveData(){localStorage.setItem(STORAGE_KEY,JSON.stringify(data));localStorage.setItem('life_tracker_last_good_backup',JSON.stringify(data));renderAll()}
 function escapeHTML(s){return String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
 function fmt(date){return date?new Date(date+'T00:00:00').toLocaleDateString('de-DE'):'kein Datum'}
 function daysBetween(a,b){return Math.ceil((new Date(b+'T00:00:00')-new Date(a+'T00:00:00'))/86400000)}
+function monthsBetweenApprox(a,b){const days=daysBetween(a,b);return days>0?Math.max(1,Math.ceil(days/30.4375)):0}
 function addInterval(date,n,unit){if(!date)return '';const d=new Date(date+'T00:00:00');n=Number(n)||0;if(unit==='days')d.setDate(d.getDate()+n);if(unit==='weeks')d.setDate(d.getDate()+n*7);if(unit==='months')d.setMonth(d.getMonth()+n);if(unit==='years')d.setFullYear(d.getFullYear()+n);return d.toISOString().slice(0,10)}
 function unitLabel(u){return {days:'Tage',weeks:'Wochen',months:'Monate',years:'Jahre'}[u]||u}
 function badgeForDays(left){if(left==='')return '<span class="badge">ohne Datum</span>';if(left<0)return `<span class="badge danger">${Math.abs(left)} Tage überfällig</span>`;if(left<=14)return `<span class="badge warn">in ${left} Tagen</span>`;return `<span class="badge">in ${left} Tagen</span>`}
@@ -109,11 +111,38 @@ function renderAppointments(){
     <div class="meta">Letztes Mal/erledigt: ${fmt(item.lastDate)}<br>Wäre fällig: ${fmt(due)}<br>${item.bookedDate?`Neuer Termin ist vereinbart am: ${fmt(item.bookedDate)}<br>`:''}Intervall: ${item.interval||'-'} ${unitLabel(item.unit)}</div>
     <div class="card-actions"><button class="small-btn" data-action="done-appt-today" data-id="${item.id}">Heute erledigt</button><button class="small-btn" data-action="done-appt-date" data-id="${item.id}">Erledigt am Datum</button><button class="small-btn" data-action="book-appt" data-id="${item.id}">Termin vereinbart</button><button class="small-btn edit-btn" data-action="edit-appt" data-id="${item.id}">Bearbeiten</button><button class="small-btn delete-btn" data-action="delete-appt" data-id="${item.id}">Löschen</button></div>`;list.appendChild(c)})
 }
+function goalInfo(item){
+  const start=Number(item.start)||0;
+  const current=Number(item.current)||0;
+  const target=Number(item.target)||100;
+  const remaining=Math.max(0,target-current);
+  const monthly=Number(item.monthly)||0;
+  const p=target===start?100:Math.max(0,Math.min(100,((current-start)/(target-start))*100));
+  const monthsByMonthly=monthly>0&&remaining>0?Math.ceil(remaining/monthly):null;
+  const predictedDate=monthsByMonthly?addInterval(todayISO(),monthsByMonthly,'months'):'';
+  const dueDate=item.dueDate||'';
+  const monthsToDue=dueDate?monthsBetweenApprox(todayISO(),dueDate):0;
+  const neededMonthly=dueDate&&remaining>0&&monthsToDue>0?remaining/monthsToDue:null;
+  return {start,current,target,remaining,monthly,p,monthsByMonthly,predictedDate,dueDate,monthsToDue,neededMonthly};
+}
+function goalMetaText(item){
+  const g=goalInfo(item);
+  const lines=[];
+  if(g.monthly>0 && g.monthsByMonthly){lines.push(`Bei ${g.monthly}/Monat: ca. ${g.monthsByMonthly} Monate${g.predictedDate?` (bis ${fmt(g.predictedDate)})`:''}.`)}
+  else if(g.remaining>0){lines.push('Keine Prognose ohne monatliche Schätzung.')}
+  else{lines.push('Ziel erreicht.')}
+  if(g.dueDate){
+    if(g.remaining<=0) lines.push(`Gewünschtes Datum: ${fmt(g.dueDate)}.`);
+    else if(g.neededMonthly!==null) lines.push(`Für ${fmt(g.dueDate)} nötig: ca. ${g.neededMonthly.toFixed(2)}/Monat.`);
+    else lines.push(`Gewünschtes Datum ${fmt(g.dueDate)} ist erreicht/überschritten.`);
+  }
+  return lines.join('<br>');
+}
 function renderGoals(){
   const list=el('goalList');list.innerHTML=data.goals.length?'':'<p class="muted-empty">Noch keine Ziele.</p>';
-  data.goals.forEach(item=>{const start=Number(item.start)||0,current=Number(item.current)||0,target=Number(item.target)||100;const p=target===start?100:Math.max(0,Math.min(100,((current-start)/(target-start))*100));const monthly=Number(item.monthly)||0;const months=monthly>0?Math.ceil((target-current)/monthly):null;const c=document.createElement('div');c.className='card';c.innerHTML=`
-    <div class="card-head"><div><div class="card-title">${escapeHTML(item.name)}</div><div class="meta">${escapeHTML(item.category||'Sonstiges')} · ${current} von ${target}</div></div><span class="badge">${p.toFixed(1)}%</span></div>
-    <div class="progress-wrap"><div class="progress" style="width:${p}%"></div></div><div class="meta">${months&&months>0?`Bei ${monthly}/Monat noch ca. ${months} Monate.`:'Keine Prognose ohne monatliche Schätzung.'}</div>
+  data.goals.forEach(item=>{const g=goalInfo(item);const c=document.createElement('div');c.className='card';c.innerHTML=`
+    <div class="card-head"><div><div class="card-title">${escapeHTML(item.name)}</div><div class="meta">${escapeHTML(item.category||'Sonstiges')} · ${g.current} von ${g.target}</div></div><span class="badge">${g.p.toFixed(1)}%</span></div>
+    <div class="progress-wrap"><div class="progress" style="width:${g.p}%"></div></div><div class="meta">${goalMetaText(item)}</div>
     <div class="card-actions"><button class="small-btn" data-action="update-goal" data-id="${item.id}">Aktuell ändern</button><button class="small-btn edit-btn" data-action="edit-goal" data-id="${item.id}">Bearbeiten</button><button class="small-btn delete-btn" data-action="delete-goal" data-id="${item.id}">Löschen</button></div>`;list.appendChild(c)})
 }
 function renderMaster(){
@@ -125,7 +154,7 @@ function renderDashboard(){
   el('soonEmpty').innerHTML=active.length?active.map(i=>`<div class="card"><strong>${escapeHTML(i.name)}</strong><div class="meta">voraussichtlich ${fmt(i.pred)}</div></div>`).join(''):'<p class="muted-empty">Noch keine Prognosen. Nutze Schätzungen oder markiere Dinge als leer.</p>';
   const appts=data.appointments.map(i=>({...i,shown:i.bookedDate||addInterval(i.lastDate,i.interval,i.unit)})).filter(i=>i.shown).sort((a,b)=>a.shown.localeCompare(b.shown)).slice(0,6);
   el('soonDue').innerHTML=appts.length?appts.map(i=>`<div class="card"><strong>${escapeHTML(i.name)}</strong><div class="meta">${i.bookedDate?'vereinbart: ':'fällig: '}${fmt(i.shown)}</div></div>`).join(''):'<p class="muted-empty">Noch keine Termine.</p>';
-  el('goalSummary').innerHTML=data.goals.length?data.goals.slice(0,6).map(i=>{const p=(Number(i.target)===Number(i.start))?100:Math.max(0,Math.min(100,((Number(i.current)-Number(i.start))/(Number(i.target)-Number(i.start)))*100));return `<div class="card"><strong>${escapeHTML(i.name)}</strong><div class="progress-wrap"><div class="progress" style="width:${p}%"></div></div><div class="meta">${p.toFixed(1)}%</div></div>`}).join(''):'<p class="muted-empty">Noch keine Ziele.</p>'
+  el('goalSummary').innerHTML=data.goals.length?data.goals.slice(0,6).map(i=>{const g=goalInfo(i);return `<div class="card"><strong>${escapeHTML(i.name)}</strong><div class="progress-wrap"><div class="progress" style="width:${g.p}%"></div></div><div class="meta">${g.p.toFixed(1)}%${g.predictedDate?` · ca. ${fmt(g.predictedDate)}`:''}${g.dueDate?` · Zieltermin: ${fmt(g.dueDate)}`:''}</div></div>`}).join(''):'<p class="muted-empty">Noch keine Ziele.</p>'
 }
 function renderAll(){fillSelects();renderConsumption();renderAppointments();renderGoals();renderMaster();renderDashboard()}
 
@@ -194,7 +223,7 @@ el('backupToggle').addEventListener('click',()=>el('backupMenu').classList.toggl
 el('consItemSelect').addEventListener('change',applyMasterToConsumption);el('apptItemSelect').addEventListener('change',applyMasterToAppointment);el('consFilter').addEventListener('change',renderConsumption);
 el('addConsBtn').addEventListener('click',()=>{const item=getConsumptionForm();if(!item)return alert('Bitte Artikel auswählen oder neuen Namen eingeben.');data.consumption.push(item);clear(['consItemSelect','consNewName','consNewCategory','consAmount','consOpened','consEstimate']);el('consUnit').value='days';saveData()});
 el('addApptBtn').addEventListener('click',()=>{const item=getAppointmentForm();if(!item)return alert('Bitte Termin auswählen oder neuen Namen eingeben.');data.appointments.push(item);clear(['apptItemSelect','apptNewName','apptNewCategory','apptLastDate','apptInterval','apptBookedDate']);saveData()});
-el('addGoalBtn').addEventListener('click',()=>{if(!el('goalName').value.trim())return alert('Bitte Zielnamen eingeben.');data.goals.push({id:uid(),name:el('goalName').value.trim(),category:categoryValue('goalCategorySelect','goalNewCategory'),start:el('goalStart').value||0,current:el('goalCurrent').value||0,target:el('goalTarget').value||100,monthly:el('goalMonthly').value||'',createdAt:Date.now()});clear(['goalName','goalNewCategory','goalStart','goalCurrent','goalTarget','goalMonthly']);saveData()});
+el('addGoalBtn').addEventListener('click',()=>{if(!el('goalName').value.trim())return alert('Bitte Zielnamen eingeben.');data.goals.push({id:uid(),name:el('goalName').value.trim(),category:categoryValue('goalCategorySelect','goalNewCategory'),start:el('goalStart').value||0,current:el('goalCurrent').value||0,target:el('goalTarget').value||100,monthly:el('goalMonthly').value||'',dueDate:el('goalDueDate').value||'',createdAt:Date.now()});clear(['goalName','goalNewCategory','goalStart','goalCurrent','goalTarget','goalMonthly','goalDueDate']);saveData()});
 el('addMasterBtn').addEventListener('click',()=>{if(!el('masterName').value.trim())return alert('Bitte Namen eingeben.');data.masterItems.push({id:uid(),name:el('masterName').value.trim(),type:el('masterType').value,category:categoryValue('masterCategorySelect','masterNewCategory'),amount:el('masterAmount').value.trim(),estimate:el('masterEstimate').value||'',unit:el('masterUnit').value,note:el('masterNote').value.trim(),createdAt:Date.now()});clear(['masterName','masterNewCategory','masterAmount','masterEstimate','masterNote']);saveData()});
 
 document.body.addEventListener('click',e=>{const btn=e.target.closest('button[data-action]');if(!btn)return;const {action,id}=btn.dataset;
@@ -208,7 +237,7 @@ document.body.addEventListener('click',e=>{const btn=e.target.closest('button[da
  if(action==='edit-appt'){const i=data.appointments.find(x=>x.id===id);if(!i)return;openEditModal('Termin bearbeiten',[{key:'name',label:'Name',value:i.name},{key:'category',label:'Kategorie',type:'select',value:i.category||'Sonstiges',options:categoryOptions(i.category)},{key:'lastDate',label:'Letztes Mal / erledigt am',type:'date',value:i.lastDate||''},{key:'interval',label:'Intervall',type:'number',min:'1',value:i.interval||''},{key:'unit',label:'Einheit',type:'select',value:i.unit||'months',options:unitOptions()},{key:'bookedDate',label:'Neuer Termin ist vereinbart am',type:'date',value:i.bookedDate||''}],v=>{i.name=v.name.trim()||i.name;i.category=v.category||'Sonstiges';i.lastDate=v.lastDate;i.interval=v.interval;i.unit=v.unit;i.bookedDate=v.bookedDate;});return;}
  if(action==='delete-appt')data.appointments=data.appointments.filter(i=>i.id!==id);
  if(action==='update-goal'){const g=data.goals.find(i=>i.id===id);if(!g)return;openEditModal('Aktuellen Zielwert ändern',[{key:'current',label:'Aktueller Wert',type:'number',step:'0.01',value:g.current||''}],v=>{g.current=v.current});return;}
- if(action==='edit-goal'){const g=data.goals.find(i=>i.id===id);if(!g)return;openEditModal('Ziel bearbeiten',[{key:'name',label:'Name',value:g.name},{key:'category',label:'Kategorie',type:'select',value:g.category||'Sonstiges',options:categoryOptions(g.category)},{key:'start',label:'Startwert',type:'number',step:'0.01',value:g.start||''},{key:'current',label:'Aktuell',type:'number',step:'0.01',value:g.current||''},{key:'target',label:'Zielwert',type:'number',step:'0.01',value:g.target||''},{key:'monthly',label:'Schätzung pro Monat',type:'number',step:'0.01',value:g.monthly||''}],v=>{g.name=v.name.trim()||g.name;g.category=v.category||'Sonstiges';g.start=v.start;g.current=v.current;g.target=v.target;g.monthly=v.monthly;});return;}
+ if(action==='edit-goal'){const g=data.goals.find(i=>i.id===id);if(!g)return;openEditModal('Ziel bearbeiten',[{key:'name',label:'Name',value:g.name},{key:'category',label:'Kategorie',type:'select',value:g.category||'Sonstiges',options:categoryOptions(g.category)},{key:'start',label:'Startwert',type:'number',step:'0.01',value:g.start||''},{key:'current',label:'Aktuell',type:'number',step:'0.01',value:g.current||''},{key:'target',label:'Zielwert',type:'number',step:'0.01',value:g.target||''},{key:'monthly',label:'Schätzung pro Monat',type:'number',step:'0.01',value:g.monthly||''},{key:'dueDate',label:'Gewünschtes Fertigstellungsdatum',type:'date',value:g.dueDate||''}],v=>{g.name=v.name.trim()||g.name;g.category=v.category||'Sonstiges';g.start=v.start;g.current=v.current;g.target=v.target;g.monthly=v.monthly;g.dueDate=v.dueDate;});return;}
  if(action==='delete-goal')data.goals=data.goals.filter(i=>i.id!==id);
  if(action==='edit-master'){const m=data.masterItems.find(x=>x.id===id);if(!m)return;openEditModal('Stammdaten bearbeiten',[{key:'name',label:'Name',value:m.name},{key:'type',label:'Typ',type:'select',value:m.type||'consumption',options:[{value:'consumption',label:'Verbrauch'},{value:'appointment',label:'Termin'}]},{key:'category',label:'Kategorie',type:'select',value:m.category||'Sonstiges',options:categoryOptions(m.category)},{key:'amount',label:'Standardmenge',value:m.amount||''},{key:'estimate',label:'Schätzung / Intervall',type:'number',min:'1',value:m.estimate||''},{key:'unit',label:'Einheit',type:'select',value:m.unit||'days',options:unitOptions()},{key:'note',label:'Notiz',type:'textarea',value:m.note||''}],v=>{m.name=v.name.trim()||m.name;m.type=v.type;m.category=v.category||'Sonstiges';m.amount=v.amount.trim();m.estimate=v.estimate;m.unit=v.unit;m.note=v.note.trim();});return;}
  if(action==='delete-master')data.masterItems=data.masterItems.filter(i=>i.id!==id);
