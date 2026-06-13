@@ -1,4 +1,5 @@
-const STORAGE_KEY = 'life_tracker_v7';
+const STORAGE_KEY = 'life_tracker_v8';
+const LEGACY_KEYS = ['life_tracker_v7','life_tracker_v6','life_tracker_v5','life_tracker_v4','life_tracker_v3','life_tracker_v2','life_tracker_data'];
 const defaultData = {
   categories: ['Lebensmittel','Getränke','Haushalt','Hygiene','Tiere','Garten','Medizin','Finanzen','Sonstiges'],
   masterItems: [],
@@ -11,10 +12,35 @@ const el = id => document.getElementById(id);
 const todayISO = () => new Date().toISOString().slice(0,10);
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,8);
 
-function loadData(){try{const raw=localStorage.getItem(STORAGE_KEY)||localStorage.getItem('life_tracker_data');return raw?normalize(JSON.parse(raw)):structuredClone(defaultData)}catch{return structuredClone(defaultData)}}
+function loadData(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw) return normalize(JSON.parse(raw));
+
+    // Update-Schutz: ältere Versionen hatten eigene Speicher-Namen.
+    // Beim Hochladen einer neuen Version werden vorhandene Daten jetzt gesucht
+    // und in den neuen Speicher übernommen, statt mit leeren Stammdaten zu starten.
+    let best = null;
+    for(const key of LEGACY_KEYS){
+      const oldRaw = localStorage.getItem(key);
+      if(!oldRaw) continue;
+      const oldData = normalize(JSON.parse(oldRaw));
+      const score = (oldData.masterItems?.length||0)*10 + (oldData.consumption?.length||0) + (oldData.appointments?.length||0) + (oldData.goals?.length||0);
+      if(!best || score > best.score) best = {key, data: oldData, score};
+    }
+    if(best){
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(best.data));
+      return best.data;
+    }
+    return structuredClone(defaultData);
+  }catch(err){
+    console.error('Daten konnten nicht geladen werden:', err);
+    return structuredClone(defaultData);
+  }
+}
 function normalize(d){
   const normalized={...structuredClone(defaultData),...d,categories:d.categories?.length?d.categories:structuredClone(defaultData.categories),masterItems:d.masterItems||[],consumption:d.consumption||[],appointments:d.appointments||[],goals:d.goals||[]};
-  normalized.masterItems = normalized.masterItems.map(i=>({...i, amount:i.amount||'', unit:i.unit||'days'}));
+  normalized.masterItems = normalized.masterItems.map(i=>({...i, amount:i.amount||'', unit:i.unit||'days', estimate:i.estimate||i.estimateDays||''}));
   normalized.consumption = normalized.consumption.map(i=>({...i, estimate:i.estimate||i.estimateDays||'', unit:i.unit||'days'}));
   return normalized;
 }
@@ -171,6 +197,49 @@ document.body.addEventListener('click',e=>{const btn=e.target.closest('button[da
  saveData();
 });
 
+
+function mergeArrayByIdOrName(current, incoming){
+  const result=[...(current||[])];
+  for(const item of (incoming||[])){
+    const idx=result.findIndex(x=>(item.id&&x.id===item.id) || (item.name&&x.name===item.name&&x.type===item.type));
+    if(idx>=0){
+      // Schutz: vorhandene Felder nicht mit leeren Feldern aus Backup überschreiben.
+      result[idx]={...item,...result[idx]};
+    }else{
+      result.push(item);
+    }
+  }
+  return result;
+}
+function mergeData(current, incoming){
+  return normalize({
+    ...current,
+    categories:[...new Set([...(current.categories||[]),...(incoming.categories||[])])],
+    masterItems:mergeArrayByIdOrName(current.masterItems, incoming.masterItems),
+    consumption:mergeArrayByIdOrName(current.consumption, incoming.consumption),
+    appointments:mergeArrayByIdOrName(current.appointments, incoming.appointments),
+    goals:mergeArrayByIdOrName(current.goals, incoming.goals)
+  });
+}
+
 el('exportBackupBtn').addEventListener('click',()=>{const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`life-tracker-backup-${todayISO()}.json`;a.click();URL.revokeObjectURL(url)});
-el('importBackupInput').addEventListener('change',event=>{const file=event.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=()=>{try{data=normalize(JSON.parse(reader.result));saveData();alert('Backup importiert.')}catch{alert('Backup konnte nicht importiert werden.')}};reader.readAsText(file)});
+el('importBackupInput').addEventListener('change',event=>{
+  const file=event.target.files[0];
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{
+      const imported=normalize(JSON.parse(reader.result));
+      const merged=mergeData(data, imported);
+      data=merged;
+      saveData();
+      alert('Backup importiert. Vorhandene Stammdaten wurden beibehalten und ergänzt.');
+    }catch(err){
+      console.error(err);
+      alert('Backup konnte nicht importiert werden.');
+    }
+  };
+  reader.readAsText(file);
+  event.target.value='';
+});
 renderAll();
