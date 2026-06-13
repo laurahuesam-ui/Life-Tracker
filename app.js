@@ -86,7 +86,119 @@ function renderAll(){fillSelects();renderConsumption();renderAppointments();rend
 function getConsumptionForm(){const m=masterById(el('consItemSelect').value);const name=el('consNewName').value.trim()||m?.name;if(!name)return null;const category=categoryValue('consCategorySelect','consNewCategory')||m?.category||'Sonstiges';const estimate=el('consEstimate').value||m?.estimate||'';const amount=el('consAmount').value.trim()||m?.amount||'';if(!data.masterItems.some(i=>i.type==='consumption'&&i.name===name))data.masterItems.push({id:uid(),type:'consumption',name,category,amount,estimate,unit:'days',note:''});return {id:uid(),name,category,amount,openedDate:el('consOpened').value||'',estimateDays:estimate,finishedDate:null,createdAt:Date.now()}}
 function getAppointmentForm(){const m=masterById(el('apptItemSelect').value);const name=el('apptNewName').value.trim()||m?.name;if(!name)return null;const category=categoryValue('apptCategorySelect','apptNewCategory')||m?.category||'Sonstiges';const interval=el('apptInterval').value||m?.estimate||6;const unit=el('apptUnit').value||m?.unit||'months';if(!data.masterItems.some(i=>i.type==='appointment'&&i.name===name))data.masterItems.push({id:uid(),type:'appointment',name,category,estimate:interval,unit,note:''});return {id:uid(),name,category,lastDate:el('apptLastDate').value||'',interval,unit,bookedDate:el('apptBookedDate').value||'',createdAt:Date.now()}}
 
-document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.view').forEach(v=>v.classList.remove('active-view'));btn.classList.add('active');el(btn.dataset.view).classList.add('active-view')}));
+
+function openEditModal(title, fields, onSave){
+  let overlay=document.getElementById('editModalOverlay');
+  if(!overlay){
+    overlay=document.createElement('div');
+    overlay.id='editModalOverlay';
+    overlay.className='modal-overlay';
+    document.body.appendChild(overlay);
+  }
+  overlay.innerHTML=`
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="editModalTitle">
+      <div class="modal-head">
+        <h2 id="editModalTitle">${escapeHTML(title)}</h2>
+        <button class="modal-close" type="button" aria-label="Schließen">×</button>
+      </div>
+      <div class="modal-grid">
+        ${fields.map((f,idx)=>{
+          const id='modalField'+idx;
+          const value=escapeHTML(f.value ?? '');
+          const label=`<label for="${id}">${escapeHTML(f.label)}</label>`;
+          if(f.type==='select'){
+            return `<div class="modal-field">${label}<select id="${id}" data-key="${escapeHTML(f.key)}">${(f.options||[]).map(o=>`<option value="${escapeHTML(o.value)}" ${String(o.value)===String(f.value)?'selected':''}>${escapeHTML(o.label)}</option>`).join('')}</select></div>`;
+          }
+          if(f.type==='textarea'){
+            return `<div class="modal-field full">${label}<textarea id="${id}" data-key="${escapeHTML(f.key)}" rows="3">${value}</textarea></div>`;
+          }
+          return `<div class="modal-field">${label}<input id="${id}" data-key="${escapeHTML(f.key)}" type="${escapeHTML(f.type||'text')}" ${f.step?`step="${escapeHTML(f.step)}"`:''} ${f.min?`min="${escapeHTML(f.min)}"`:''} value="${value}" /></div>`;
+        }).join('')}
+      </div>
+      <div class="modal-actions">
+        <button class="small-btn" type="button" data-modal-cancel>Abbrechen</button>
+        <button class="primary-btn modal-save" type="button">Speichern</button>
+      </div>
+    </div>`;
+  overlay.classList.add('show');
+  const close=()=>overlay.classList.remove('show');
+  overlay.querySelector('.modal-close').addEventListener('click',close);
+  overlay.querySelector('[data-modal-cancel]').addEventListener('click',close);
+  overlay.addEventListener('click',e=>{if(e.target===overlay)close()},{once:true});
+  overlay.querySelector('.modal-save').addEventListener('click',()=>{
+    const values={};
+    overlay.querySelectorAll('[data-key]').forEach(input=>{values[input.dataset.key]=input.value});
+    onSave(values);
+    close();
+    saveData();
+  });
+  const first=overlay.querySelector('input,select,textarea');
+  if(first)first.focus();
+}
+function categoryOptions(current){
+  const cats=[...data.categories];
+  if(current && !cats.includes(current))cats.unshift(current);
+  return cats.map(c=>({value:c,label:c}));
+}
+function unitOptions(){return [{value:'days',label:'Tage'},{value:'weeks',label:'Wochen'},{value:'months',label:'Monate'},{value:'years',label:'Jahre'}]}
+
+document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{
+function openEditModal(title, fields, onSave){
+  let overlay=document.getElementById('editModalOverlay');
+  if(!overlay){
+    overlay=document.createElement('div');
+    overlay.id='editModalOverlay';
+    overlay.className='modal-overlay';
+    document.body.appendChild(overlay);
+  }
+  overlay.innerHTML=`
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="editModalTitle">
+      <div class="modal-head">
+        <h2 id="editModalTitle">${escapeHTML(title)}</h2>
+        <button class="modal-close" type="button" aria-label="Schließen">×</button>
+      </div>
+      <div class="modal-grid">
+        ${fields.map((f,idx)=>{
+          const id='modalField'+idx;
+          const value=escapeHTML(f.value ?? '');
+          const label=`<label for="${id}">${escapeHTML(f.label)}</label>`;
+          if(f.type==='select'){
+            return `<div class="modal-field">${label}<select id="${id}" data-key="${escapeHTML(f.key)}">${(f.options||[]).map(o=>`<option value="${escapeHTML(o.value)}" ${String(o.value)===String(f.value)?'selected':''}>${escapeHTML(o.label)}</option>`).join('')}</select></div>`;
+          }
+          if(f.type==='textarea'){
+            return `<div class="modal-field full">${label}<textarea id="${id}" data-key="${escapeHTML(f.key)}" rows="3">${value}</textarea></div>`;
+          }
+          return `<div class="modal-field">${label}<input id="${id}" data-key="${escapeHTML(f.key)}" type="${escapeHTML(f.type||'text')}" ${f.step?`step="${escapeHTML(f.step)}"`:''} ${f.min?`min="${escapeHTML(f.min)}"`:''} value="${value}" /></div>`;
+        }).join('')}
+      </div>
+      <div class="modal-actions">
+        <button class="small-btn" type="button" data-modal-cancel>Abbrechen</button>
+        <button class="primary-btn modal-save" type="button">Speichern</button>
+      </div>
+    </div>`;
+  overlay.classList.add('show');
+  const close=()=>overlay.classList.remove('show');
+  overlay.querySelector('.modal-close').addEventListener('click',close);
+  overlay.querySelector('[data-modal-cancel]').addEventListener('click',close);
+  overlay.addEventListener('click',e=>{if(e.target===overlay)close()},{once:true});
+  overlay.querySelector('.modal-save').addEventListener('click',()=>{
+    const values={};
+    overlay.querySelectorAll('[data-key]').forEach(input=>{values[input.dataset.key]=input.value});
+    onSave(values);
+    close();
+    saveData();
+  });
+  const first=overlay.querySelector('input,select,textarea');
+  if(first)first.focus();
+}
+function categoryOptions(current){
+  const cats=[...data.categories];
+  if(current && !cats.includes(current))cats.unshift(current);
+  return cats.map(c=>({value:c,label:c}));
+}
+function unitOptions(){return [{value:'days',label:'Tage'},{value:'weeks',label:'Wochen'},{value:'months',label:'Monate'},{value:'years',label:'Jahre'}]}
+
+document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.view').forEach(v=>v.classList.remove('active-view'));btn.classList.add('active');el(btn.dataset.view).classList.add('active-view')}));
 el('backupToggle').addEventListener('click',()=>el('backupMenu').classList.toggle('open'));document.addEventListener('click',e=>{if(!e.target.closest('.toolbar'))el('backupMenu').classList.remove('open')});
 el('consItemSelect').addEventListener('change',applyMasterToConsumption);el('apptItemSelect').addEventListener('change',applyMasterToAppointment);el('consFilter').addEventListener('change',renderConsumption);
 el('addConsBtn').addEventListener('click',()=>{const item=getConsumptionForm();if(!item)return alert('Bitte Artikel auswählen oder neuen Namen eingeben.');data.consumption.push(item);clear(['consItemSelect','consNewName','consNewCategory','consAmount','consOpened','consEstimate']);saveData()});
@@ -98,16 +210,16 @@ document.body.addEventListener('click',e=>{const btn=e.target.closest('button[da
  if(action==='finish-cons-today')data.consumption=data.consumption.map(i=>i.id===id?{...i,finishedDate:todayISO(),openedDate:i.openedDate||todayISO()}:i);
  if(action==='finish-cons-date'){const i=data.consumption.find(x=>x.id===id);const d=prompt('Leer/erledigt am (JJJJ-MM-TT):',i.finishedDate||todayISO());if(d)data.consumption=data.consumption.map(x=>x.id===id?{...x,finishedDate:d,openedDate:x.openedDate||d}:x)}
  if(action==='delete-cons')data.consumption=data.consumption.filter(i=>i.id!==id);
- if(action==='edit-cons'){const i=data.consumption.find(x=>x.id===id);if(!i)return;i.name=prompt('Name:',i.name)||i.name;i.category=prompt('Kategorie:',i.category)||i.category;i.amount=prompt('Menge:',i.amount)||i.amount;i.openedDate=prompt('Geöffnet/gestartet (leer möglich, JJJJ-MM-TT):',i.openedDate)||'';i.estimateDays=prompt('Grobe Schätzung in Tagen:',i.estimateDays)||i.estimateDays;i.finishedDate=prompt('Leer/erledigt am (leer möglich, JJJJ-MM-TT):',i.finishedDate)||'';}
+ if(action==='edit-cons'){const i=data.consumption.find(x=>x.id===id);if(!i)return;openEditModal('Verbrauch bearbeiten',[{key:'name',label:'Name',value:i.name},{key:'category',label:'Kategorie',type:'select',value:i.category||'Sonstiges',options:categoryOptions(i.category)},{key:'amount',label:'Menge',value:i.amount||''},{key:'openedDate',label:'Geöffnet/gestartet',type:'date',value:i.openedDate||''},{key:'estimateDays',label:'Grobe Schätzung in Tagen',type:'number',min:'1',value:i.estimateDays||''},{key:'finishedDate',label:'Leer/erledigt am',type:'date',value:i.finishedDate||''}],v=>{i.name=v.name.trim()||i.name;i.category=v.category||'Sonstiges';i.amount=v.amount.trim();i.openedDate=v.openedDate;i.estimateDays=v.estimateDays;i.finishedDate=v.finishedDate;});return;}
  if(action==='done-appt-today')data.appointments=data.appointments.map(i=>i.id===id?{...i,lastDate:todayISO(),bookedDate:''}:i);
  if(action==='done-appt-date'){const i=data.appointments.find(x=>x.id===id);const d=prompt('Erledigt am (JJJJ-MM-TT):',i.lastDate||todayISO());if(d)data.appointments=data.appointments.map(x=>x.id===id?{...x,lastDate:d,bookedDate:''}:x)}
  if(action==='book-appt'){const i=data.appointments.find(x=>x.id===id);const d=prompt('Neuer Termin ist vereinbart am (JJJJ-MM-TT):',i.bookedDate||todayISO());if(d)data.appointments=data.appointments.map(x=>x.id===id?{...x,bookedDate:d}:x)}
- if(action==='edit-appt'){const i=data.appointments.find(x=>x.id===id);if(!i)return;i.name=prompt('Name:',i.name)||i.name;i.category=prompt('Kategorie:',i.category)||i.category;i.lastDate=prompt('Letztes Mal/erledigt am (leer möglich, JJJJ-MM-TT):',i.lastDate)||'';i.interval=prompt('Intervall:',i.interval)||i.interval;i.unit=prompt('Einheit: days, weeks, months, years',i.unit)||i.unit;i.bookedDate=prompt('Vereinbarter Termin (leer möglich, JJJJ-MM-TT):',i.bookedDate)||'';}
+ if(action==='edit-appt'){const i=data.appointments.find(x=>x.id===id);if(!i)return;openEditModal('Termin bearbeiten',[{key:'name',label:'Name',value:i.name},{key:'category',label:'Kategorie',type:'select',value:i.category||'Sonstiges',options:categoryOptions(i.category)},{key:'lastDate',label:'Letztes Mal / erledigt am',type:'date',value:i.lastDate||''},{key:'interval',label:'Intervall',type:'number',min:'1',value:i.interval||''},{key:'unit',label:'Einheit',type:'select',value:i.unit||'months',options:unitOptions()},{key:'bookedDate',label:'Neuer Termin ist vereinbart am',type:'date',value:i.bookedDate||''}],v=>{i.name=v.name.trim()||i.name;i.category=v.category||'Sonstiges';i.lastDate=v.lastDate;i.interval=v.interval;i.unit=v.unit;i.bookedDate=v.bookedDate;});return;}
  if(action==='delete-appt')data.appointments=data.appointments.filter(i=>i.id!==id);
- if(action==='update-goal'){const g=data.goals.find(i=>i.id===id);const v=prompt('Neuer aktueller Wert:',g.current);if(v!==null)g.current=v}
- if(action==='edit-goal'){const g=data.goals.find(i=>i.id===id);if(!g)return;g.name=prompt('Name:',g.name)||g.name;g.category=prompt('Kategorie:',g.category)||g.category;g.start=prompt('Startwert:',g.start)||g.start;g.current=prompt('Aktuell:',g.current)||g.current;g.target=prompt('Zielwert:',g.target)||g.target;g.monthly=prompt('Schätzung pro Monat:',g.monthly)||g.monthly;}
+ if(action==='update-goal'){const g=data.goals.find(i=>i.id===id);if(!g)return;openEditModal('Aktuellen Zielwert ändern',[{key:'current',label:'Aktueller Wert',type:'number',step:'0.01',value:g.current||''}],v=>{g.current=v.current});return;}
+ if(action==='edit-goal'){const g=data.goals.find(i=>i.id===id);if(!g)return;openEditModal('Ziel bearbeiten',[{key:'name',label:'Name',value:g.name},{key:'category',label:'Kategorie',type:'select',value:g.category||'Sonstiges',options:categoryOptions(g.category)},{key:'start',label:'Startwert',type:'number',step:'0.01',value:g.start||''},{key:'current',label:'Aktuell',type:'number',step:'0.01',value:g.current||''},{key:'target',label:'Zielwert',type:'number',step:'0.01',value:g.target||''},{key:'monthly',label:'Schätzung pro Monat',type:'number',step:'0.01',value:g.monthly||''}],v=>{g.name=v.name.trim()||g.name;g.category=v.category||'Sonstiges';g.start=v.start;g.current=v.current;g.target=v.target;g.monthly=v.monthly;});return;}
  if(action==='delete-goal')data.goals=data.goals.filter(i=>i.id!==id);
- if(action==='edit-master'){const m=data.masterItems.find(x=>x.id===id);if(!m)return;m.name=prompt('Name:',m.name)||m.name;m.category=prompt('Kategorie:',m.category)||m.category;if(m.type==='consumption')m.amount=prompt('Standardmenge:',m.amount||'')||'';m.estimate=prompt('Schätzung/Intervall:',m.estimate)||m.estimate;m.unit=prompt('Einheit: days, weeks, months, years',m.unit)||m.unit;m.note=prompt('Notiz:',m.note)||m.note;}
+ if(action==='edit-master'){const m=data.masterItems.find(x=>x.id===id);if(!m)return;openEditModal('Stammdaten bearbeiten',[{key:'name',label:'Name',value:m.name},{key:'type',label:'Typ',type:'select',value:m.type||'consumption',options:[{value:'consumption',label:'Verbrauch'},{value:'appointment',label:'Termin'}]},{key:'category',label:'Kategorie',type:'select',value:m.category||'Sonstiges',options:categoryOptions(m.category)},{key:'amount',label:'Standardmenge',value:m.amount||''},{key:'estimate',label:'Schätzung / Intervall',type:'number',min:'1',value:m.estimate||''},{key:'unit',label:'Einheit',type:'select',value:m.unit||'days',options:unitOptions()},{key:'note',label:'Notiz',type:'textarea',value:m.note||''}],v=>{m.name=v.name.trim()||m.name;m.type=v.type;m.category=v.category||'Sonstiges';m.amount=v.amount.trim();m.estimate=v.estimate;m.unit=v.unit;m.note=v.note.trim();});return;}
  if(action==='delete-master')data.masterItems=data.masterItems.filter(i=>i.id!==id);
  saveData();
 });
