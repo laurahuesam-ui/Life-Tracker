@@ -1,4 +1,4 @@
-const APP_VERSION = 'v10';
+const APP_VERSION = 'v11';
 // Stabiler Speichername: bleibt ab jetzt bei jeder neuen Version gleich,
 // damit Updates keine Stammdaten/Einträge mehr verlieren.
 const STORAGE_KEY = 'life_tracker_data';
@@ -154,7 +154,26 @@ function renderDashboard(){
   el('soonEmpty').innerHTML=active.length?active.map(i=>`<div class="card"><strong>${escapeHTML(i.name)}</strong><div class="meta">voraussichtlich ${fmt(i.pred)}</div></div>`).join(''):'<p class="muted-empty">Noch keine Prognosen. Nutze Schätzungen oder markiere Dinge als leer.</p>';
   const appts=data.appointments.map(i=>({...i,shown:i.bookedDate||addInterval(i.lastDate,i.interval,i.unit)})).filter(i=>i.shown).sort((a,b)=>a.shown.localeCompare(b.shown)).slice(0,6);
   el('soonDue').innerHTML=appts.length?appts.map(i=>`<div class="card"><strong>${escapeHTML(i.name)}</strong><div class="meta">${i.bookedDate?'vereinbart: ':'fällig: '}${fmt(i.shown)}</div></div>`).join(''):'<p class="muted-empty">Noch keine Termine.</p>';
-  el('goalSummary').innerHTML=data.goals.length?data.goals.slice(0,6).map(i=>{const g=goalInfo(i);return `<div class="card"><strong>${escapeHTML(i.name)}</strong><div class="progress-wrap"><div class="progress" style="width:${g.p}%"></div></div><div class="meta">${g.p.toFixed(1)}%${g.predictedDate?` · ca. ${fmt(g.predictedDate)}`:''}${g.dueDate?` · Zieltermin: ${fmt(g.dueDate)}`:''}</div></div>`}).join(''):'<p class="muted-empty">Noch keine Ziele.</p>'
+  el('goalSummary').innerHTML=data.goals.length?data.goals.slice(0,6).map(i=>{const g=goalInfo(i);return `<div class="card"><strong>${escapeHTML(i.name)}</strong><div class="progress-wrap"><div class="progress" style="width:${g.p}%"></div></div><div class="meta">${g.p.toFixed(1)}%${g.predictedDate?` · ca. ${fmt(g.predictedDate)}`:''}${g.dueDate?` · Zieltermin: ${fmt(g.dueDate)}`:''}</div></div>`}).join(''):'<p class="muted-empty">Noch keine Ziele.</p>';
+
+  const trackedConsumptionNames = new Set(data.consumption.filter(i=>i.openedDate || i.finishedDate).map(i=>i.name));
+  const trackedAppointmentNames = new Set(data.appointments.filter(i=>i.lastDate || i.bookedDate).map(i=>i.name));
+  const masterNotTracked = data.masterItems.filter(i => {
+    if(i.type === 'consumption') return !trackedConsumptionNames.has(i.name);
+    if(i.type === 'appointment') return !trackedAppointmentNames.has(i.name);
+    return false;
+  });
+  const entryWithoutDate = [
+    ...data.consumption.filter(i=>!i.openedDate && !i.finishedDate).map(i=>({...i,type:'consumption'})),
+    ...data.appointments.filter(i=>!i.lastDate && !i.bookedDate).map(i=>({...i,type:'appointment'}))
+  ];
+  const combined = [...masterNotTracked, ...entryWithoutDate]
+    .filter((item, idx, arr) => arr.findIndex(x => x.name === item.name && x.type === item.type) === idx)
+    .sort((a,b)=>a.name.localeCompare(b.name,'de'))
+    .slice(0,8);
+  el('notTracked').innerHTML = combined.length
+    ? combined.map(i=>`<div class="card"><strong>${escapeHTML(i.name)}</strong><div class="meta">${i.type==='consumption'?'Verbrauch':'Termin'} · ${escapeHTML(i.category||'Sonstiges')} · noch kein Datum</div></div>`).join('')
+    : '<p class="muted-empty">Alles Angelegte wurde schon mindestens einmal mit Datum getrackt.</p>';
 }
 function renderAll(){fillSelects();renderConsumption();renderAppointments();renderGoals();renderMaster();renderDashboard()}
 
