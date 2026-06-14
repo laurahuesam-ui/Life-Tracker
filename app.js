@@ -1,4 +1,4 @@
-const APP_VERSION = 'v13';
+const APP_VERSION = 'v14';
 // Stabiler Speichername: bleibt ab jetzt bei jeder neuen Version gleich,
 // damit Updates keine Stammdaten/Einträge mehr verlieren.
 const STORAGE_KEY = 'life_tracker_data';
@@ -98,18 +98,18 @@ function renderConsumption(){
   if(filter==='active')items=items.filter(i=>!i.finishedDate);if(filter==='finished')items=items.filter(i=>i.finishedDate);if(filter==='nodate')items=items.filter(i=>!i.openedDate);
   items.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
   const list=el('consList');list.innerHTML=items.length?'':'<p class="muted-empty">Noch keine Verbrauchseinträge.</p>';
-  items.forEach(item=>{const avg=averageConsumptionDays(item.name);const pred=prediction(item);const left=pred?daysBetween(todayISO(),pred):'';const c=document.createElement('div');c.className='card';c.innerHTML=`
+  items.forEach(item=>{const avg=averageConsumptionDays(item.name);const pred=prediction(item);const left=pred?daysBetween(todayISO(),pred):'';const c=document.createElement('div');c.className='card actionable-card';c.dataset.action='edit-cons';c.dataset.id=item.id;c.tabIndex=0;c.setAttribute('role','button');c.innerHTML=`
     <div class="card-head"><div><div class="card-title">${escapeHTML(item.name)}</div><div class="meta">${escapeHTML(item.category||'Sonstiges')} · ${escapeHTML(item.amount||'ohne Menge')}</div></div>${item.finishedDate?'<span class="badge">aufgebraucht</span>':badgeForDays(left)}</div>
     <div class="meta">Geöffnet/gestartet: ${fmt(item.openedDate)}<br>${item.finishedDate?`Leer/erledigt: ${fmt(item.finishedDate)}<br>`:''}${pred&&!item.finishedDate?`Voraussichtlich leer: ${fmt(pred)}<br>`:''}${consumptionEstimateLabel(item,avg)}</div>
-    <div class="card-actions">${!item.finishedDate?`<button class="small-btn" data-action="finish-cons-today" data-id="${item.id}">Heute leer</button><button class="small-btn" data-action="finish-cons-date" data-id="${item.id}">Leer am Datum</button>`:''}<button class="small-btn edit-btn" data-action="edit-cons" data-id="${item.id}">Bearbeiten</button><button class="small-btn delete-btn" data-action="delete-cons" data-id="${item.id}">Löschen</button></div>`;list.appendChild(c)})
+    <div class="card-actions">${!item.finishedDate?`<button class="small-btn" data-action="finish-cons-today" data-id="${item.id}">Heute leer</button><button class="small-btn" data-action="finish-cons-date" data-id="${item.id}">Leer am Datum</button>`:''}<button class="small-btn delete-btn" data-action="delete-cons" data-id="${item.id}">Löschen</button></div>`;list.appendChild(c)})
 }
 function renderAppointments(){
   const items=[...data.appointments].sort((a,b)=>(a.bookedDate||addInterval(a.lastDate,a.interval,a.unit)||'9999').localeCompare(b.bookedDate||addInterval(b.lastDate,b.interval,b.unit)||'9999'));
   const list=el('apptList');list.innerHTML=items.length?'':'<p class="muted-empty">Noch keine Termine.</p>';
-  items.forEach(item=>{const due=addInterval(item.lastDate,item.interval,item.unit);const shown=item.bookedDate||due;const left=shown?daysBetween(todayISO(),shown):'';const c=document.createElement('div');c.className='card';c.innerHTML=`
+  items.forEach(item=>{const due=addInterval(item.lastDate,item.interval,item.unit);const shown=item.bookedDate||due;const left=shown?daysBetween(todayISO(),shown):'';const c=document.createElement('div');c.className='card actionable-card';c.dataset.action='edit-appt';c.dataset.id=item.id;c.tabIndex=0;c.setAttribute('role','button');c.innerHTML=`
     <div class="card-head"><div><div class="card-title">${escapeHTML(item.name)}</div><div class="meta">${escapeHTML(item.category||'Sonstiges')}</div></div>${item.bookedDate?'<span class="badge">vereinbart</span>':badgeForDays(left)}</div>
     <div class="meta">Letztes Mal/erledigt: ${fmt(item.lastDate)}<br>Wäre fällig: ${fmt(due)}<br>${item.bookedDate?`Neuer Termin ist vereinbart am: ${fmt(item.bookedDate)}<br>`:''}Intervall: ${item.interval||'-'} ${unitLabel(item.unit)}</div>
-    <div class="card-actions"><button class="small-btn" data-action="done-appt-today" data-id="${item.id}">Heute erledigt</button><button class="small-btn" data-action="done-appt-date" data-id="${item.id}">Erledigt am Datum</button><button class="small-btn" data-action="book-appt" data-id="${item.id}">Termin vereinbart</button><button class="small-btn edit-btn" data-action="edit-appt" data-id="${item.id}">Bearbeiten</button><button class="small-btn delete-btn" data-action="delete-appt" data-id="${item.id}">Löschen</button></div>`;list.appendChild(c)})
+    <div class="card-actions"><button class="small-btn" data-action="done-appt-today" data-id="${item.id}">Heute erledigt</button><button class="small-btn" data-action="done-appt-date" data-id="${item.id}">Erledigt am Datum</button><button class="small-btn" data-action="book-appt" data-id="${item.id}">Termin vereinbart</button><button class="small-btn delete-btn" data-action="delete-appt" data-id="${item.id}">Löschen</button></div>`;list.appendChild(c)})
 }
 function goalInfo(item){
   const start=Number(item.start)||0;
@@ -140,21 +140,21 @@ function goalMetaText(item){
 }
 function renderGoals(){
   const list=el('goalList');list.innerHTML=data.goals.length?'':'<p class="muted-empty">Noch keine Ziele.</p>';
-  data.goals.forEach(item=>{const g=goalInfo(item);const c=document.createElement('div');c.className='card';c.innerHTML=`
+  data.goals.forEach(item=>{const g=goalInfo(item);const c=document.createElement('div');c.className='card actionable-card';c.dataset.action='edit-goal';c.dataset.id=item.id;c.tabIndex=0;c.setAttribute('role','button');c.innerHTML=`
     <div class="card-head"><div><div class="card-title">${escapeHTML(item.name)}</div><div class="meta">${escapeHTML(item.category||'Sonstiges')} · ${g.current} von ${g.target}</div></div><span class="badge">${g.p.toFixed(1)}%</span></div>
     <div class="progress-wrap"><div class="progress" style="width:${g.p}%"></div></div><div class="meta">${goalMetaText(item)}</div>
-    <div class="card-actions"><button class="small-btn" data-action="update-goal" data-id="${item.id}">Aktuell ändern</button><button class="small-btn edit-btn" data-action="edit-goal" data-id="${item.id}">Bearbeiten</button><button class="small-btn delete-btn" data-action="delete-goal" data-id="${item.id}">Löschen</button></div>`;list.appendChild(c)})
+    <div class="card-actions"><button class="small-btn" data-action="update-goal" data-id="${item.id}">Aktuell ändern</button><button class="small-btn delete-btn" data-action="delete-goal" data-id="${item.id}">Löschen</button></div>`;list.appendChild(c)})
 }
 function renderMaster(){
   const list=el('masterList');list.innerHTML=data.masterItems.length?'':'<p class="muted-empty">Noch keine Stammdaten.</p>';
-  data.masterItems.slice().sort((a,b)=>a.name.localeCompare(b.name,'de')).forEach(item=>{const c=document.createElement('div');c.className='card';c.innerHTML=`<div class="card-head"><div><div class="card-title">${escapeHTML(item.name)}</div><div class="meta">${item.type==='consumption'?'Verbrauch':'Termin'} · ${escapeHTML(item.category||'Sonstiges')}${item.type==='consumption'&&item.amount?' · Menge: '+escapeHTML(item.amount):''}</div></div><span class="badge">${item.estimate||'-'} ${unitLabel(item.unit||'days')}</span></div>${item.note?`<div class="meta">${escapeHTML(item.note)}</div>`:''}<div class="card-actions"><button class="small-btn edit-btn" data-action="edit-master" data-id="${item.id}">Bearbeiten</button><button class="small-btn delete-btn" data-action="delete-master" data-id="${item.id}">Löschen</button></div>`;list.appendChild(c)})
+  data.masterItems.slice().sort((a,b)=>a.name.localeCompare(b.name,'de')).forEach(item=>{const c=document.createElement('div');c.className='card actionable-card';c.dataset.action='edit-master';c.dataset.id=item.id;c.tabIndex=0;c.setAttribute('role','button');c.innerHTML=`<div class="card-head"><div><div class="card-title">${escapeHTML(item.name)}</div><div class="meta">${item.type==='consumption'?'Verbrauch':'Termin'} · ${escapeHTML(item.category||'Sonstiges')}${item.type==='consumption'&&item.amount?' · Menge: '+escapeHTML(item.amount):''}</div></div><span class="badge">${item.estimate||'-'} ${unitLabel(item.unit||'days')}</span></div>${item.note?`<div class="meta">${escapeHTML(item.note)}</div>`:''}<div class="card-actions"><button class="small-btn delete-btn" data-action="delete-master" data-id="${item.id}">Löschen</button></div>`;list.appendChild(c)})
 }
 function renderDashboard(){
   const active=data.consumption.filter(i=>!i.finishedDate).map(i=>({...i,pred:prediction(i)})).filter(i=>i.pred).sort((a,b)=>a.pred.localeCompare(b.pred)).slice(0,6);
-  el('soonEmpty').innerHTML=active.length?active.map(i=>`<div class="card clickable-card"><strong>${escapeHTML(i.name)}</strong><div class="meta">voraussichtlich ${fmt(i.pred)}</div><div class="card-actions"><button class="small-btn edit-btn" data-action="edit-cons" data-id="${i.id}">Öffnen/Bearbeiten</button></div></div>`).join(''):'<p class="muted-empty">Noch keine Prognosen. Nutze Schätzungen oder markiere Dinge als leer.</p>';
+  el('soonEmpty').innerHTML=active.length?active.map(i=>`<div class="card clickable-card actionable-card" role="button" tabindex="0" data-action="edit-cons" data-id="${i.id}"><strong>${escapeHTML(i.name)}</strong><div class="meta">voraussichtlich ${fmt(i.pred)}</div></div>`).join(''):'<p class="muted-empty">Noch keine Prognosen. Nutze Schätzungen oder markiere Dinge als leer.</p>';
   const appts=data.appointments.map(i=>({...i,shown:i.bookedDate||addInterval(i.lastDate,i.interval,i.unit)})).filter(i=>i.shown).sort((a,b)=>a.shown.localeCompare(b.shown)).slice(0,6);
-  el('soonDue').innerHTML=appts.length?appts.map(i=>`<div class="card clickable-card"><strong>${escapeHTML(i.name)}</strong><div class="meta">${i.bookedDate?'vereinbart: ':'fällig: '}${fmt(i.shown)}</div><div class="card-actions"><button class="small-btn edit-btn" data-action="edit-appt" data-id="${i.id}">Öffnen/Bearbeiten</button></div></div>`).join(''):'<p class="muted-empty">Noch keine Termine.</p>';
-  el('goalSummary').innerHTML=data.goals.length?data.goals.slice(0,6).map(i=>{const g=goalInfo(i);return `<div class="card clickable-card"><strong>${escapeHTML(i.name)}</strong><div class="progress-wrap"><div class="progress" style="width:${g.p}%"></div></div><div class="meta">${g.p.toFixed(1)}%${g.predictedDate?` · ca. ${fmt(g.predictedDate)}`:''}${g.dueDate?` · Zieltermin: ${fmt(g.dueDate)}`:''}</div><div class="card-actions"><button class="small-btn edit-btn" data-action="edit-goal" data-id="${i.id}">Öffnen/Bearbeiten</button></div></div>`}).join(''):'<p class="muted-empty">Noch keine Ziele.</p>';
+  el('soonDue').innerHTML=appts.length?appts.map(i=>`<div class="card clickable-card actionable-card" role="button" tabindex="0" data-action="edit-appt" data-id="${i.id}"><strong>${escapeHTML(i.name)}</strong><div class="meta">${i.bookedDate?'vereinbart: ':'fällig: '}${fmt(i.shown)}</div></div>`).join(''):'<p class="muted-empty">Noch keine Termine.</p>';
+  el('goalSummary').innerHTML=data.goals.length?data.goals.slice(0,6).map(i=>{const g=goalInfo(i);return `<div class="card clickable-card actionable-card" role="button" tabindex="0" data-action="edit-goal" data-id="${i.id}"><strong>${escapeHTML(i.name)}</strong><div class="progress-wrap"><div class="progress" style="width:${g.p}%"></div></div><div class="meta">${g.p.toFixed(1)}%${g.predictedDate?` · ca. ${fmt(g.predictedDate)}`:''}${g.dueDate?` · Zieltermin: ${fmt(g.dueDate)}`:''}</div></div>`}).join(''):'<p class="muted-empty">Noch keine Ziele.</p>';
 
   const trackedConsumptionNames = new Set(data.consumption.filter(i=>i.openedDate || i.finishedDate).map(i=>i.name));
   const trackedAppointmentNames = new Set(data.appointments.filter(i=>i.lastDate || i.bookedDate).map(i=>i.name));
@@ -175,8 +175,7 @@ function renderDashboard(){
     ? combined.map(i=>{
         const typeLabel=i.type==='consumption'?'Verbrauch':'Termin';
         const primaryAction=i.source==='master'?'start-master':(i.type==='consumption'?'edit-cons':'edit-appt');
-        const helperText=i.source==='master'?'Antippen, um Datum hinzuzufügen':'Antippen, um Datum hinzuzufügen oder zu bearbeiten';
-        return `<div class="card clickable-card dashboard-click-card" role="button" tabindex="0" data-action="${primaryAction}" data-id="${i.id}"><strong>${escapeHTML(i.name)}</strong><div class="meta">${typeLabel} · ${escapeHTML(i.category||'Sonstiges')} · noch kein Datum</div><div class="meta">${helperText}</div></div>`;
+        return `<div class="card clickable-card actionable-card dashboard-click-card" role="button" tabindex="0" data-action="${primaryAction}" data-id="${i.id}"><strong>${escapeHTML(i.name)}</strong><div class="meta">${typeLabel} · ${escapeHTML(i.category||'Sonstiges')} · noch kein Datum</div></div>`;
       }).join('')
     : '<p class="muted-empty">Alles Angelegte wurde schon mindestens einmal mit Datum getrackt.</p>';
 }
@@ -271,7 +270,7 @@ document.body.addEventListener('click',e=>{const btn=e.target.closest('[data-act
 
 
 document.body.addEventListener('keydown', e => {
-  const card = e.target.closest('.dashboard-click-card[data-action]');
+  const card = e.target.closest('.actionable-card[data-action]');
   if(!card) return;
   if(e.key === 'Enter' || e.key === ' '){
     e.preventDefault();

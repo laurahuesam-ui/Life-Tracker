@@ -28,3 +28,27 @@
 .primary-mini:hover {
   filter: brightness(0.96);
 }
+
+/* v14: Karten selbst sind anklickbar – ohne extra Öffnen/Bearbeiten-Button */
+.actionable-card{
+  cursor:pointer;
+  transition:transform .16s ease, box-shadow .16s ease, border-color .16s ease, background-color .16s ease;
+}
+.actionable-card:hover{
+  transform:translateY(-2px);
+  box-shadow:0 12px 28px rgba(64,57,42,.13);
+  border-color:rgba(91,139,76,.42);
+  background:#fffef9;
+}
+.actionable-card:active{
+  transform:translateY(0);
+  box-shadow:0 6px 18px rgba(64,57,42,.10);
+}
+.actionable-card:focus-visible{
+  outline:3px solid rgba(91,139,76,.25);
+  outline-offset:3px;
+}
+.card-actions button{
+  position:relative;
+  z-index:2;
+}
