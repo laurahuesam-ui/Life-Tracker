@@ -6,6 +6,19 @@
   cursor: default;
 }
 
+.dashboard-click-card {
+  cursor: pointer;
+  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+}
+
+.dashboard-click-card:hover,
+.dashboard-click-card:focus {
+  transform: translateY(-1px);
+  border-color: var(--accent);
+  box-shadow: 0 10px 26px rgba(64,57,42,.12);
+  outline: none;
+}
+
 .primary-mini {
   background: #15803d;
   color: #ffffff;
