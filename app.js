@@ -1,4 +1,4 @@
-const APP_VERSION = 'v11';
+const APP_VERSION = 'v12';
 // Stabiler Speichername: bleibt ab jetzt bei jeder neuen Version gleich,
 // damit Updates keine Stammdaten/Einträge mehr verlieren.
 const STORAGE_KEY = 'life_tracker_data';
@@ -151,10 +151,10 @@ function renderMaster(){
 }
 function renderDashboard(){
   const active=data.consumption.filter(i=>!i.finishedDate).map(i=>({...i,pred:prediction(i)})).filter(i=>i.pred).sort((a,b)=>a.pred.localeCompare(b.pred)).slice(0,6);
-  el('soonEmpty').innerHTML=active.length?active.map(i=>`<div class="card"><strong>${escapeHTML(i.name)}</strong><div class="meta">voraussichtlich ${fmt(i.pred)}</div></div>`).join(''):'<p class="muted-empty">Noch keine Prognosen. Nutze Schätzungen oder markiere Dinge als leer.</p>';
+  el('soonEmpty').innerHTML=active.length?active.map(i=>`<div class="card clickable-card"><strong>${escapeHTML(i.name)}</strong><div class="meta">voraussichtlich ${fmt(i.pred)}</div><div class="card-actions"><button class="small-btn edit-btn" data-action="edit-cons" data-id="${i.id}">Öffnen/Bearbeiten</button></div></div>`).join(''):'<p class="muted-empty">Noch keine Prognosen. Nutze Schätzungen oder markiere Dinge als leer.</p>';
   const appts=data.appointments.map(i=>({...i,shown:i.bookedDate||addInterval(i.lastDate,i.interval,i.unit)})).filter(i=>i.shown).sort((a,b)=>a.shown.localeCompare(b.shown)).slice(0,6);
-  el('soonDue').innerHTML=appts.length?appts.map(i=>`<div class="card"><strong>${escapeHTML(i.name)}</strong><div class="meta">${i.bookedDate?'vereinbart: ':'fällig: '}${fmt(i.shown)}</div></div>`).join(''):'<p class="muted-empty">Noch keine Termine.</p>';
-  el('goalSummary').innerHTML=data.goals.length?data.goals.slice(0,6).map(i=>{const g=goalInfo(i);return `<div class="card"><strong>${escapeHTML(i.name)}</strong><div class="progress-wrap"><div class="progress" style="width:${g.p}%"></div></div><div class="meta">${g.p.toFixed(1)}%${g.predictedDate?` · ca. ${fmt(g.predictedDate)}`:''}${g.dueDate?` · Zieltermin: ${fmt(g.dueDate)}`:''}</div></div>`}).join(''):'<p class="muted-empty">Noch keine Ziele.</p>';
+  el('soonDue').innerHTML=appts.length?appts.map(i=>`<div class="card clickable-card"><strong>${escapeHTML(i.name)}</strong><div class="meta">${i.bookedDate?'vereinbart: ':'fällig: '}${fmt(i.shown)}</div><div class="card-actions"><button class="small-btn edit-btn" data-action="edit-appt" data-id="${i.id}">Öffnen/Bearbeiten</button></div></div>`).join(''):'<p class="muted-empty">Noch keine Termine.</p>';
+  el('goalSummary').innerHTML=data.goals.length?data.goals.slice(0,6).map(i=>{const g=goalInfo(i);return `<div class="card clickable-card"><strong>${escapeHTML(i.name)}</strong><div class="progress-wrap"><div class="progress" style="width:${g.p}%"></div></div><div class="meta">${g.p.toFixed(1)}%${g.predictedDate?` · ca. ${fmt(g.predictedDate)}`:''}${g.dueDate?` · Zieltermin: ${fmt(g.dueDate)}`:''}</div><div class="card-actions"><button class="small-btn edit-btn" data-action="edit-goal" data-id="${i.id}">Öffnen/Bearbeiten</button></div></div>`}).join(''):'<p class="muted-empty">Noch keine Ziele.</p>';
 
   const trackedConsumptionNames = new Set(data.consumption.filter(i=>i.openedDate || i.finishedDate).map(i=>i.name));
   const trackedAppointmentNames = new Set(data.appointments.filter(i=>i.lastDate || i.bookedDate).map(i=>i.name));
@@ -162,17 +162,24 @@ function renderDashboard(){
     if(i.type === 'consumption') return !trackedConsumptionNames.has(i.name);
     if(i.type === 'appointment') return !trackedAppointmentNames.has(i.name);
     return false;
-  });
+  }).map(i=>({...i,source:'master'}));
   const entryWithoutDate = [
-    ...data.consumption.filter(i=>!i.openedDate && !i.finishedDate).map(i=>({...i,type:'consumption'})),
-    ...data.appointments.filter(i=>!i.lastDate && !i.bookedDate).map(i=>({...i,type:'appointment'}))
+    ...data.consumption.filter(i=>!i.openedDate && !i.finishedDate).map(i=>({...i,type:'consumption',source:'entry'})),
+    ...data.appointments.filter(i=>!i.lastDate && !i.bookedDate).map(i=>({...i,type:'appointment',source:'entry'}))
   ];
   const combined = [...masterNotTracked, ...entryWithoutDate]
     .filter((item, idx, arr) => arr.findIndex(x => x.name === item.name && x.type === item.type) === idx)
     .sort((a,b)=>a.name.localeCompare(b.name,'de'))
     .slice(0,8);
   el('notTracked').innerHTML = combined.length
-    ? combined.map(i=>`<div class="card"><strong>${escapeHTML(i.name)}</strong><div class="meta">${i.type==='consumption'?'Verbrauch':'Termin'} · ${escapeHTML(i.category||'Sonstiges')} · noch kein Datum</div></div>`).join('')
+    ? combined.map(i=>{
+        const typeLabel=i.type==='consumption'?'Verbrauch':'Termin';
+        const primaryAction=i.source==='master'?'start-master':(i.type==='consumption'?'edit-cons':'edit-appt');
+        const editAction=i.source==='master'?'edit-master':(i.type==='consumption'?'edit-cons':'edit-appt');
+        const primaryText=i.source==='master'?'Datum hinzufügen':'Datum hinzufügen/Bearbeiten';
+        const editText=i.source==='master'?'Stammdaten bearbeiten':'Eintrag bearbeiten';
+        return `<div class="card clickable-card"><strong>${escapeHTML(i.name)}</strong><div class="meta">${typeLabel} · ${escapeHTML(i.category||'Sonstiges')} · noch kein Datum</div><div class="card-actions"><button class="small-btn primary-mini" data-action="${primaryAction}" data-id="${i.id}">${primaryText}</button><button class="small-btn edit-btn" data-action="${editAction}" data-id="${i.id}">${editText}</button></div></div>`;
+      }).join('')
     : '<p class="muted-empty">Alles Angelegte wurde schon mindestens einmal mit Datum getrackt.</p>';
 }
 function renderAll(){fillSelects();renderConsumption();renderAppointments();renderGoals();renderMaster();renderDashboard()}
@@ -258,6 +265,7 @@ document.body.addEventListener('click',e=>{const btn=e.target.closest('button[da
  if(action==='update-goal'){const g=data.goals.find(i=>i.id===id);if(!g)return;openEditModal('Aktuellen Zielwert ändern',[{key:'current',label:'Aktueller Wert',type:'number',step:'0.01',value:g.current||''}],v=>{g.current=v.current});return;}
  if(action==='edit-goal'){const g=data.goals.find(i=>i.id===id);if(!g)return;openEditModal('Ziel bearbeiten',[{key:'name',label:'Name',value:g.name},{key:'category',label:'Kategorie',type:'select',value:g.category||'Sonstiges',options:categoryOptions(g.category)},{key:'start',label:'Startwert',type:'number',step:'0.01',value:g.start||''},{key:'current',label:'Aktuell',type:'number',step:'0.01',value:g.current||''},{key:'target',label:'Zielwert',type:'number',step:'0.01',value:g.target||''},{key:'monthly',label:'Schätzung pro Monat',type:'number',step:'0.01',value:g.monthly||''},{key:'dueDate',label:'Gewünschtes Fertigstellungsdatum',type:'date',value:g.dueDate||''}],v=>{g.name=v.name.trim()||g.name;g.category=v.category||'Sonstiges';g.start=v.start;g.current=v.current;g.target=v.target;g.monthly=v.monthly;g.dueDate=v.dueDate;});return;}
  if(action==='delete-goal')data.goals=data.goals.filter(i=>i.id!==id);
+ if(action==='start-master'){const m=data.masterItems.find(x=>x.id===id);if(!m)return;if(m.type==='consumption'){openEditModal('Verbrauch starten / Datum hinzufügen',[{key:'name',label:'Name',value:m.name},{key:'category',label:'Kategorie',type:'select',value:m.category||'Sonstiges',options:categoryOptions(m.category)},{key:'amount',label:'Menge',value:m.amount||''},{key:'openedDate',label:'Geöffnet/gestartet am',type:'date',value:todayISO()},{key:'estimate',label:'Grobe Schätzung / Intervall',type:'number',min:'1',value:m.estimate||''},{key:'unit',label:'Einheit',type:'select',value:m.unit||'days',options:unitOptions()},{key:'finishedDate',label:'Leer/erledigt am (optional)',type:'date',value:''}],v=>{data.consumption.push({id:uid(),name:v.name.trim()||m.name,category:v.category||m.category||'Sonstiges',amount:v.amount.trim(),openedDate:v.openedDate||'',estimate:v.estimate||m.estimate||'',unit:v.unit||m.unit||'days',finishedDate:v.finishedDate||'',createdAt:Date.now()});});return;}openEditModal('Termin starten / Datum hinzufügen',[{key:'name',label:'Name',value:m.name},{key:'category',label:'Kategorie',type:'select',value:m.category||'Sonstiges',options:categoryOptions(m.category)},{key:'lastDate',label:'Letztes Mal / erledigt am',type:'date',value:todayISO()},{key:'interval',label:'Intervall',type:'number',min:'1',value:m.estimate||''},{key:'unit',label:'Einheit',type:'select',value:m.unit||'months',options:unitOptions()},{key:'bookedDate',label:'Neuer Termin ist vereinbart am (optional)',type:'date',value:''}],v=>{data.appointments.push({id:uid(),name:v.name.trim()||m.name,category:v.category||m.category||'Sonstiges',lastDate:v.lastDate||'',interval:v.interval||m.estimate||'',unit:v.unit||m.unit||'months',bookedDate:v.bookedDate||'',createdAt:Date.now()});});return;}
  if(action==='edit-master'){const m=data.masterItems.find(x=>x.id===id);if(!m)return;openEditModal('Stammdaten bearbeiten',[{key:'name',label:'Name',value:m.name},{key:'type',label:'Typ',type:'select',value:m.type||'consumption',options:[{value:'consumption',label:'Verbrauch'},{value:'appointment',label:'Termin'}]},{key:'category',label:'Kategorie',type:'select',value:m.category||'Sonstiges',options:categoryOptions(m.category)},{key:'amount',label:'Standardmenge',value:m.amount||''},{key:'estimate',label:'Schätzung / Intervall',type:'number',min:'1',value:m.estimate||''},{key:'unit',label:'Einheit',type:'select',value:m.unit||'days',options:unitOptions()},{key:'note',label:'Notiz',type:'textarea',value:m.note||''}],v=>{m.name=v.name.trim()||m.name;m.type=v.type;m.category=v.category||'Sonstiges';m.amount=v.amount.trim();m.estimate=v.estimate;m.unit=v.unit;m.note=v.note.trim();});return;}
  if(action==='delete-master')data.masterItems=data.masterItems.filter(i=>i.id!==id);
  saveData();
