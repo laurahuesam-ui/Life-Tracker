@@ -1,4 +1,4 @@
-const APP_VERSION = 'v14';
+const APP_VERSION = 'v15';
 // Stabiler Speichername: bleibt ab jetzt bei jeder neuen Version gleich,
 // damit Updates keine Stammdaten/Einträge mehr verlieren.
 const STORAGE_KEY = 'life_tracker_data';
@@ -60,6 +60,7 @@ function normalize(d){
   const normalized={...structuredClone(defaultData),...d,categories:d.categories?.length?d.categories:structuredClone(defaultData.categories),masterItems:d.masterItems||[],consumption:d.consumption||[],appointments:d.appointments||[],goals:d.goals||[]};
   normalized.masterItems = normalized.masterItems.map(i=>({...i, amount:i.amount||'', unit:i.unit||'days', estimate:i.estimate||i.estimateDays||''}));
   normalized.consumption = normalized.consumption.map(i=>({...i, estimate:i.estimate||i.estimateDays||'', unit:i.unit||'days'}));
+  normalized.appointments = normalized.appointments.map(i=>({...i, interval:i.interval||i.estimate||'', unit:i.unit||'months', doneHistory:Array.isArray(i.doneHistory)?i.doneHistory.filter(Boolean):[] }));
   normalized.goals = normalized.goals.map(i=>({...i, dueDate:i.dueDate||i.targetDate||i.deadline||''}));
   return normalized;
 }
@@ -91,7 +92,56 @@ function averageConsumptionDays(name){
   if(!finished.length)return null;return finished.reduce((a,b)=>a+b,0)/finished.length;
 }
 function prediction(item){if(!item.openedDate||item.finishedDate)return null;const avg=averageConsumptionDays(item.name);if(avg)return addInterval(item.openedDate,Math.round(avg),'days');const estimate=Number(item.estimate||item.estimateDays);return estimate?addInterval(item.openedDate,estimate,item.unit||'days'):null}
-function consumptionEstimateLabel(item,avg){if(avg)return `Durchschnitt: ${avg.toFixed(1)} Tage`;const estimate=item.estimate||item.estimateDays;return estimate?`Schätzung: ${estimate} ${unitLabel(item.unit||'days')}`:'Schätzung: keine'}
+function consumptionEstimateLabel(item,avg){
+  const estimate=item.estimate||item.estimateDays;
+  const original=estimate?`Ursprüngliche Schätzung: ${estimate} ${unitLabel(item.unit||'days')}`:'Ursprüngliche Schätzung: keine';
+  const calculated=avg?`Berechnet aus Daten: ${avg.toFixed(1)} Tage`:'Berechnet aus Daten: noch nicht genug Daten';
+  return `${original}<br>${calculated}`;
+}
+function intervalToDays(n,unit){
+  n=Number(n)||0;
+  if(unit==='days')return n;
+  if(unit==='weeks')return n*7;
+  if(unit==='months')return n*30.4375;
+  if(unit==='years')return n*365.25;
+  return n;
+}
+function historyDates(item){
+  const dates=[...(item.doneHistory||[])];
+  if(item.lastDate)dates.push(item.lastDate);
+  return [...new Set(dates.filter(Boolean))].sort();
+}
+function averageAppointmentDays(item){
+  const dates=historyDates(item);
+  if(dates.length<2)return null;
+  const intervals=[];
+  for(let idx=1;idx<dates.length;idx++){
+    const diff=daysBetween(dates[idx-1],dates[idx]);
+    if(diff>0)intervals.push(diff);
+  }
+  if(!intervals.length)return null;
+  return intervals.reduce((a,b)=>a+b,0)/intervals.length;
+}
+function appointmentDueDate(item){
+  if(!item.lastDate)return '';
+  const avg=averageAppointmentDays(item);
+  if(avg)return addInterval(item.lastDate,Math.round(avg),'days');
+  return addInterval(item.lastDate,item.interval,item.unit);
+}
+function appointmentIntervalLabel(item){
+  const original=item.interval?`Ursprüngliches Intervall: ${item.interval} ${unitLabel(item.unit||'months')}`:'Ursprüngliches Intervall: keine';
+  const avg=averageAppointmentDays(item);
+  const calculated=avg?`Berechnet aus Daten: ${avg.toFixed(1)} Tage`:'Berechnet aus Daten: noch nicht genug Daten';
+  return `${original}<br>${calculated}`;
+}
+function markAppointmentDone(item,date){
+  const d=date||todayISO();
+  item.doneHistory=historyDates(item);
+  if(!item.doneHistory.includes(d))item.doneHistory.push(d);
+  item.doneHistory=item.doneHistory.sort();
+  item.lastDate=d;
+  item.bookedDate='';
+}
 
 function renderConsumption(){
   const filter=el('consFilter').value;let items=[...data.consumption];
@@ -104,11 +154,11 @@ function renderConsumption(){
     <div class="card-actions">${!item.finishedDate?`<button class="small-btn" data-action="finish-cons-today" data-id="${item.id}">Heute leer</button><button class="small-btn" data-action="finish-cons-date" data-id="${item.id}">Leer am Datum</button>`:''}<button class="small-btn delete-btn" data-action="delete-cons" data-id="${item.id}">Löschen</button></div>`;list.appendChild(c)})
 }
 function renderAppointments(){
-  const items=[...data.appointments].sort((a,b)=>(a.bookedDate||addInterval(a.lastDate,a.interval,a.unit)||'9999').localeCompare(b.bookedDate||addInterval(b.lastDate,b.interval,b.unit)||'9999'));
+  const items=[...data.appointments].sort((a,b)=>(a.bookedDate||appointmentDueDate(a)||'9999').localeCompare(b.bookedDate||appointmentDueDate(b)||'9999'));
   const list=el('apptList');list.innerHTML=items.length?'':'<p class="muted-empty">Noch keine Termine.</p>';
-  items.forEach(item=>{const due=addInterval(item.lastDate,item.interval,item.unit);const shown=item.bookedDate||due;const left=shown?daysBetween(todayISO(),shown):'';const c=document.createElement('div');c.className='card actionable-card';c.dataset.action='edit-appt';c.dataset.id=item.id;c.tabIndex=0;c.setAttribute('role','button');c.innerHTML=`
+  items.forEach(item=>{const due=appointmentDueDate(item);const shown=item.bookedDate||due;const left=shown?daysBetween(todayISO(),shown):'';const c=document.createElement('div');c.className='card actionable-card';c.dataset.action='edit-appt';c.dataset.id=item.id;c.tabIndex=0;c.setAttribute('role','button');c.innerHTML=`
     <div class="card-head"><div><div class="card-title">${escapeHTML(item.name)}</div><div class="meta">${escapeHTML(item.category||'Sonstiges')}</div></div>${item.bookedDate?'<span class="badge">vereinbart</span>':badgeForDays(left)}</div>
-    <div class="meta">Letztes Mal/erledigt: ${fmt(item.lastDate)}<br>Wäre fällig: ${fmt(due)}<br>${item.bookedDate?`Neuer Termin ist vereinbart am: ${fmt(item.bookedDate)}<br>`:''}Intervall: ${item.interval||'-'} ${unitLabel(item.unit)}</div>
+    <div class="meta">Letztes Mal/erledigt: ${fmt(item.lastDate)}<br>Wäre fällig: ${fmt(due)}<br>${item.bookedDate?`Neuer Termin ist vereinbart am: ${fmt(item.bookedDate)}<br>`:''}${appointmentIntervalLabel(item)}</div>
     <div class="card-actions"><button class="small-btn" data-action="done-appt-today" data-id="${item.id}">Heute erledigt</button><button class="small-btn" data-action="done-appt-date" data-id="${item.id}">Erledigt am Datum</button><button class="small-btn" data-action="book-appt" data-id="${item.id}">Termin vereinbart</button><button class="small-btn delete-btn" data-action="delete-appt" data-id="${item.id}">Löschen</button></div>`;list.appendChild(c)})
 }
 function goalInfo(item){
@@ -152,8 +202,12 @@ function renderMaster(){
 function renderDashboard(){
   const active=data.consumption.filter(i=>!i.finishedDate).map(i=>({...i,pred:prediction(i)})).filter(i=>i.pred).sort((a,b)=>a.pred.localeCompare(b.pred)).slice(0,6);
   el('soonEmpty').innerHTML=active.length?active.map(i=>`<div class="card clickable-card actionable-card" role="button" tabindex="0" data-action="edit-cons" data-id="${i.id}"><strong>${escapeHTML(i.name)}</strong><div class="meta">voraussichtlich ${fmt(i.pred)}</div></div>`).join(''):'<p class="muted-empty">Noch keine Prognosen. Nutze Schätzungen oder markiere Dinge als leer.</p>';
-  const appts=data.appointments.map(i=>({...i,shown:i.bookedDate||addInterval(i.lastDate,i.interval,i.unit)})).filter(i=>i.shown).sort((a,b)=>a.shown.localeCompare(b.shown)).slice(0,6);
-  el('soonDue').innerHTML=appts.length?appts.map(i=>`<div class="card clickable-card actionable-card" role="button" tabindex="0" data-action="edit-appt" data-id="${i.id}"><strong>${escapeHTML(i.name)}</strong><div class="meta">${i.bookedDate?'vereinbart: ':'fällig: '}${fmt(i.shown)}</div></div>`).join(''):'<p class="muted-empty">Noch keine Termine.</p>';
+  const appts=data.appointments.map(i=>({...i,shown:i.bookedDate||appointmentDueDate(i),due:appointmentDueDate(i)})).filter(i=>i.shown).sort((a,b)=>a.shown.localeCompare(b.shown)).slice(0,6);
+  el('soonDue').innerHTML=appts.length?appts.map(i=>{
+    const left=daysBetween(todayISO(),i.shown);
+    const doneBtns=left<0?`<div class="card-actions"><button class="small-btn" data-action="done-appt-today" data-id="${i.id}">Heute erledigt</button><button class="small-btn" data-action="done-appt-date" data-id="${i.id}">Erledigt am Datum</button></div>`:'';
+    return `<div class="card clickable-card actionable-card" role="button" tabindex="0" data-action="edit-appt" data-id="${i.id}"><strong>${escapeHTML(i.name)}</strong><div class="meta">${i.bookedDate?'vereinbart: ':'fällig: '}${fmt(i.shown)}<br>${appointmentIntervalLabel(i)}</div>${doneBtns}</div>`;
+  }).join(''):'<p class="muted-empty">Noch keine Termine.</p>';
   el('goalSummary').innerHTML=data.goals.length?data.goals.slice(0,6).map(i=>{const g=goalInfo(i);return `<div class="card clickable-card actionable-card" role="button" tabindex="0" data-action="edit-goal" data-id="${i.id}"><strong>${escapeHTML(i.name)}</strong><div class="progress-wrap"><div class="progress" style="width:${g.p}%"></div></div><div class="meta">${g.p.toFixed(1)}%${g.predictedDate?` · ca. ${fmt(g.predictedDate)}`:''}${g.dueDate?` · Zieltermin: ${fmt(g.dueDate)}`:''}</div></div>`}).join(''):'<p class="muted-empty">Noch keine Ziele.</p>';
 
   const trackedConsumptionNames = new Set(data.consumption.filter(i=>i.openedDate || i.finishedDate).map(i=>i.name));
@@ -182,7 +236,7 @@ function renderDashboard(){
 function renderAll(){fillSelects();renderConsumption();renderAppointments();renderGoals();renderMaster();renderDashboard()}
 
 function getConsumptionForm(){const m=masterById(el('consItemSelect').value);const name=el('consNewName').value.trim()||m?.name;if(!name)return null;const category=categoryValue('consCategorySelect','consNewCategory')||m?.category||'Sonstiges';const estimate=el('consEstimate').value||m?.estimate||'';const unit=el('consUnit').value||m?.unit||'days';const amount=el('consAmount').value.trim()||m?.amount||'';if(!data.masterItems.some(i=>i.type==='consumption'&&i.name===name))data.masterItems.push({id:uid(),type:'consumption',name,category,amount,estimate,unit,note:''});return {id:uid(),name,category,amount,openedDate:el('consOpened').value||'',estimate,unit,finishedDate:null,createdAt:Date.now()}}
-function getAppointmentForm(){const m=masterById(el('apptItemSelect').value);const name=el('apptNewName').value.trim()||m?.name;if(!name)return null;const category=categoryValue('apptCategorySelect','apptNewCategory')||m?.category||'Sonstiges';const interval=el('apptInterval').value||m?.estimate||6;const unit=el('apptUnit').value||m?.unit||'months';if(!data.masterItems.some(i=>i.type==='appointment'&&i.name===name))data.masterItems.push({id:uid(),type:'appointment',name,category,estimate:interval,unit,note:''});return {id:uid(),name,category,lastDate:el('apptLastDate').value||'',interval,unit,bookedDate:el('apptBookedDate').value||'',createdAt:Date.now()}}
+function getAppointmentForm(){const m=masterById(el('apptItemSelect').value);const name=el('apptNewName').value.trim()||m?.name;if(!name)return null;const category=categoryValue('apptCategorySelect','apptNewCategory')||m?.category||'Sonstiges';const interval=el('apptInterval').value||m?.estimate||6;const unit=el('apptUnit').value||m?.unit||'months';if(!data.masterItems.some(i=>i.type==='appointment'&&i.name===name))data.masterItems.push({id:uid(),type:'appointment',name,category,estimate:interval,unit,note:''});const lastDate=el('apptLastDate').value||'';return {id:uid(),name,category,lastDate,interval,unit,bookedDate:el('apptBookedDate').value||'',doneHistory:lastDate?[lastDate]:[],createdAt:Date.now()}}
 
 
 function openEditModal(title, fields, onSave){
@@ -254,15 +308,15 @@ document.body.addEventListener('click',e=>{const btn=e.target.closest('[data-act
  if(action==='finish-cons-date'){const i=data.consumption.find(x=>x.id===id);if(!i)return;openEditModal('Leer/erledigt am Datum',[{key:'finishedDate',label:'Leer/erledigt am',type:'date',value:i.finishedDate||todayISO()}],v=>{i.finishedDate=v.finishedDate;i.openedDate=i.openedDate||v.finishedDate;});return;}
  if(action==='delete-cons')data.consumption=data.consumption.filter(i=>i.id!==id);
  if(action==='edit-cons'){const i=data.consumption.find(x=>x.id===id);if(!i)return;openEditModal('Verbrauch bearbeiten',[{key:'name',label:'Name',value:i.name},{key:'category',label:'Kategorie',type:'select',value:i.category||'Sonstiges',options:categoryOptions(i.category)},{key:'amount',label:'Menge',value:i.amount||''},{key:'openedDate',label:'Geöffnet/gestartet',type:'date',value:i.openedDate||''},{key:'estimate',label:'Grobe Schätzung / Intervall',type:'number',min:'1',value:i.estimate||i.estimateDays||''},{key:'unit',label:'Einheit',type:'select',value:i.unit||'days',options:unitOptions()},{key:'finishedDate',label:'Leer/erledigt am',type:'date',value:i.finishedDate||''}],v=>{i.name=v.name.trim()||i.name;i.category=v.category||'Sonstiges';i.amount=v.amount.trim();i.openedDate=v.openedDate;i.estimate=v.estimate;i.unit=v.unit||'days';delete i.estimateDays;i.finishedDate=v.finishedDate;});return;}
- if(action==='done-appt-today')data.appointments=data.appointments.map(i=>i.id===id?{...i,lastDate:todayISO(),bookedDate:''}:i);
- if(action==='done-appt-date'){const i=data.appointments.find(x=>x.id===id);if(!i)return;openEditModal('Termin erledigt am Datum',[{key:'lastDate',label:'Erledigt am',type:'date',value:i.lastDate||todayISO()}],v=>{i.lastDate=v.lastDate;i.bookedDate='';});return;}
+ if(action==='done-appt-today'){const i=data.appointments.find(x=>x.id===id);if(i)markAppointmentDone(i,todayISO());}
+ if(action==='done-appt-date'){const i=data.appointments.find(x=>x.id===id);if(!i)return;openEditModal('Termin erledigt am Datum',[{key:'lastDate',label:'Erledigt am',type:'date',value:todayISO()}],v=>{if(v.lastDate)markAppointmentDone(i,v.lastDate);});return;}
  if(action==='book-appt'){const i=data.appointments.find(x=>x.id===id);if(!i)return;openEditModal('Neuer Termin vereinbart',[{key:'bookedDate',label:'Vereinbart am',type:'date',value:i.bookedDate||todayISO()}],v=>{i.bookedDate=v.bookedDate;});return;}
- if(action==='edit-appt'){const i=data.appointments.find(x=>x.id===id);if(!i)return;openEditModal('Termin bearbeiten',[{key:'name',label:'Name',value:i.name},{key:'category',label:'Kategorie',type:'select',value:i.category||'Sonstiges',options:categoryOptions(i.category)},{key:'lastDate',label:'Letztes Mal / erledigt am',type:'date',value:i.lastDate||''},{key:'interval',label:'Intervall',type:'number',min:'1',value:i.interval||''},{key:'unit',label:'Einheit',type:'select',value:i.unit||'months',options:unitOptions()},{key:'bookedDate',label:'Neuer Termin ist vereinbart am',type:'date',value:i.bookedDate||''}],v=>{i.name=v.name.trim()||i.name;i.category=v.category||'Sonstiges';i.lastDate=v.lastDate;i.interval=v.interval;i.unit=v.unit;i.bookedDate=v.bookedDate;});return;}
+ if(action==='edit-appt'){const i=data.appointments.find(x=>x.id===id);if(!i)return;openEditModal('Termin bearbeiten',[{key:'name',label:'Name',value:i.name},{key:'category',label:'Kategorie',type:'select',value:i.category||'Sonstiges',options:categoryOptions(i.category)},{key:'lastDate',label:'Letztes Mal / erledigt am',type:'date',value:i.lastDate||''},{key:'interval',label:'Intervall',type:'number',min:'1',value:i.interval||''},{key:'unit',label:'Einheit',type:'select',value:i.unit||'months',options:unitOptions()},{key:'bookedDate',label:'Neuer Termin ist vereinbart am',type:'date',value:i.bookedDate||''},{key:'doneHistory',label:'Erledigt-Historie (Komma-getrennte Daten)',type:'textarea',value:historyDates(i).join(', ')}],v=>{i.name=v.name.trim()||i.name;i.category=v.category||'Sonstiges';i.lastDate=v.lastDate;i.interval=v.interval;i.unit=v.unit;i.bookedDate=v.bookedDate;i.doneHistory=String(v.doneHistory||'').split(',').map(x=>x.trim()).filter(Boolean);if(i.lastDate && !i.doneHistory.includes(i.lastDate))i.doneHistory.push(i.lastDate);i.doneHistory=[...new Set(i.doneHistory)].sort();});return;}
  if(action==='delete-appt')data.appointments=data.appointments.filter(i=>i.id!==id);
  if(action==='update-goal'){const g=data.goals.find(i=>i.id===id);if(!g)return;openEditModal('Aktuellen Zielwert ändern',[{key:'current',label:'Aktueller Wert',type:'number',step:'0.01',value:g.current||''}],v=>{g.current=v.current});return;}
  if(action==='edit-goal'){const g=data.goals.find(i=>i.id===id);if(!g)return;openEditModal('Ziel bearbeiten',[{key:'name',label:'Name',value:g.name},{key:'category',label:'Kategorie',type:'select',value:g.category||'Sonstiges',options:categoryOptions(g.category)},{key:'start',label:'Startwert',type:'number',step:'0.01',value:g.start||''},{key:'current',label:'Aktuell',type:'number',step:'0.01',value:g.current||''},{key:'target',label:'Zielwert',type:'number',step:'0.01',value:g.target||''},{key:'monthly',label:'Schätzung pro Monat',type:'number',step:'0.01',value:g.monthly||''},{key:'dueDate',label:'Gewünschtes Fertigstellungsdatum',type:'date',value:g.dueDate||''}],v=>{g.name=v.name.trim()||g.name;g.category=v.category||'Sonstiges';g.start=v.start;g.current=v.current;g.target=v.target;g.monthly=v.monthly;g.dueDate=v.dueDate;});return;}
  if(action==='delete-goal')data.goals=data.goals.filter(i=>i.id!==id);
- if(action==='start-master'){const m=data.masterItems.find(x=>x.id===id);if(!m)return;if(m.type==='consumption'){openEditModal('Verbrauch starten / Datum hinzufügen',[{key:'name',label:'Name',value:m.name},{key:'category',label:'Kategorie',type:'select',value:m.category||'Sonstiges',options:categoryOptions(m.category)},{key:'amount',label:'Menge',value:m.amount||''},{key:'openedDate',label:'Geöffnet/gestartet am',type:'date',value:todayISO()},{key:'estimate',label:'Grobe Schätzung / Intervall',type:'number',min:'1',value:m.estimate||''},{key:'unit',label:'Einheit',type:'select',value:m.unit||'days',options:unitOptions()},{key:'finishedDate',label:'Leer/erledigt am (optional)',type:'date',value:''}],v=>{data.consumption.push({id:uid(),name:v.name.trim()||m.name,category:v.category||m.category||'Sonstiges',amount:v.amount.trim(),openedDate:v.openedDate||'',estimate:v.estimate||m.estimate||'',unit:v.unit||m.unit||'days',finishedDate:v.finishedDate||'',createdAt:Date.now()});});return;}openEditModal('Termin starten / Datum hinzufügen',[{key:'name',label:'Name',value:m.name},{key:'category',label:'Kategorie',type:'select',value:m.category||'Sonstiges',options:categoryOptions(m.category)},{key:'lastDate',label:'Letztes Mal / erledigt am',type:'date',value:todayISO()},{key:'interval',label:'Intervall',type:'number',min:'1',value:m.estimate||''},{key:'unit',label:'Einheit',type:'select',value:m.unit||'months',options:unitOptions()},{key:'bookedDate',label:'Neuer Termin ist vereinbart am (optional)',type:'date',value:''}],v=>{data.appointments.push({id:uid(),name:v.name.trim()||m.name,category:v.category||m.category||'Sonstiges',lastDate:v.lastDate||'',interval:v.interval||m.estimate||'',unit:v.unit||m.unit||'months',bookedDate:v.bookedDate||'',createdAt:Date.now()});});return;}
+ if(action==='start-master'){const m=data.masterItems.find(x=>x.id===id);if(!m)return;if(m.type==='consumption'){openEditModal('Verbrauch starten / Datum hinzufügen',[{key:'name',label:'Name',value:m.name},{key:'category',label:'Kategorie',type:'select',value:m.category||'Sonstiges',options:categoryOptions(m.category)},{key:'amount',label:'Menge',value:m.amount||''},{key:'openedDate',label:'Geöffnet/gestartet am',type:'date',value:todayISO()},{key:'estimate',label:'Grobe Schätzung / Intervall',type:'number',min:'1',value:m.estimate||''},{key:'unit',label:'Einheit',type:'select',value:m.unit||'days',options:unitOptions()},{key:'finishedDate',label:'Leer/erledigt am (optional)',type:'date',value:''}],v=>{data.consumption.push({id:uid(),name:v.name.trim()||m.name,category:v.category||m.category||'Sonstiges',amount:v.amount.trim(),openedDate:v.openedDate||'',estimate:v.estimate||m.estimate||'',unit:v.unit||m.unit||'days',finishedDate:v.finishedDate||'',createdAt:Date.now()});});return;}openEditModal('Termin starten / Datum hinzufügen',[{key:'name',label:'Name',value:m.name},{key:'category',label:'Kategorie',type:'select',value:m.category||'Sonstiges',options:categoryOptions(m.category)},{key:'lastDate',label:'Letztes Mal / erledigt am',type:'date',value:todayISO()},{key:'interval',label:'Intervall',type:'number',min:'1',value:m.estimate||''},{key:'unit',label:'Einheit',type:'select',value:m.unit||'months',options:unitOptions()},{key:'bookedDate',label:'Neuer Termin ist vereinbart am (optional)',type:'date',value:''}],v=>{const lastDate=v.lastDate||'';data.appointments.push({id:uid(),name:v.name.trim()||m.name,category:v.category||m.category||'Sonstiges',lastDate,interval:v.interval||m.estimate||'',unit:v.unit||m.unit||'months',bookedDate:v.bookedDate||'',doneHistory:lastDate?[lastDate]:[],createdAt:Date.now()});});return;}
  if(action==='edit-master'){const m=data.masterItems.find(x=>x.id===id);if(!m)return;openEditModal('Stammdaten bearbeiten',[{key:'name',label:'Name',value:m.name},{key:'type',label:'Typ',type:'select',value:m.type||'consumption',options:[{value:'consumption',label:'Verbrauch'},{value:'appointment',label:'Termin'}]},{key:'category',label:'Kategorie',type:'select',value:m.category||'Sonstiges',options:categoryOptions(m.category)},{key:'amount',label:'Standardmenge',value:m.amount||''},{key:'estimate',label:'Schätzung / Intervall',type:'number',min:'1',value:m.estimate||''},{key:'unit',label:'Einheit',type:'select',value:m.unit||'days',options:unitOptions()},{key:'note',label:'Notiz',type:'textarea',value:m.note||''}],v=>{m.name=v.name.trim()||m.name;m.type=v.type;m.category=v.category||'Sonstiges';m.amount=v.amount.trim();m.estimate=v.estimate;m.unit=v.unit;m.note=v.note.trim();});return;}
  if(action==='delete-master')data.masterItems=data.masterItems.filter(i=>i.id!==id);
  saveData();

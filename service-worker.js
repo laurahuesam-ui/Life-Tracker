@@ -1,5 +1,5 @@
-const cacheName = 'life-tracker-v14';
-const assetsToCache = ['./','./index.html','./style.css?v=13','./app.js?v=13','./manifest.json'];
+const cacheName = 'life-tracker-v15';
+const assetsToCache = ['./','./index.html','./style.css?v=15','./app.js?v=15','./manifest.json'];
 self.addEventListener('install', event => {
   self.skipWaiting();
   event.waitUntil(caches.open(cacheName).then(cache => cache.addAll(assetsToCache)));
