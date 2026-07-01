@@ -1,4 +1,4 @@
-const APP_VERSION = 'v16';
+const APP_VERSION = 'v17';
 // Stabiler Speichername: bleibt ab jetzt bei jeder neuen Version gleich,
 // damit Updates keine Stammdaten/Einträge mehr verlieren.
 const STORAGE_KEY = 'life_tracker_data';
@@ -199,40 +199,59 @@ function calculatedGoalMonthly(item){
   const last = h[h.length - 1];
   const months = monthsBetweenExact(first.date, last.date);
   const diff = last.value - first.value;
-  if(months <= 0 || diff <= 0) return null;
-  return diff / months;
+  if(months <= 0 || diff === 0) return null;
+  return diff / months; // signed: positive = Aufbau, negative = Abbau
 }
-function dateByMonthlyRate(current, target, monthly){
-  const remaining = Math.max(0, Number(target||0) - Number(current||0));
+function goalDirection(start, target){
+  return Number(target) >= Number(start) ? 1 : -1;
+}
+function goalReached(current, target, direction){
+  return direction === 1 ? Number(current) >= Number(target) : Number(current) <= Number(target);
+}
+function goalRemaining(current, target, direction){
+  return goalReached(current, target, direction) ? 0 : Math.abs(Number(target||0) - Number(current||0));
+}
+function monthlySpeedTowardTarget(monthly, direction){
   const rate = Number(monthly)||0;
+  if(rate === 0) return 0;
+  // Positive Eingabe bedeutet "pro Monat Richtung Ziel". Negative Werte bleiben trotzdem möglich.
+  return rate > 0 ? rate : Math.max(0, direction * rate);
+}
+function dateByMonthlyRate(current, target, monthly, direction){
+  const remaining = goalRemaining(current, target, direction);
+  const speed = monthlySpeedTowardTarget(monthly, direction);
   if(remaining <= 0) return todayISO();
-  if(rate <= 0) return '';
-  return addInterval(todayISO(), Math.ceil(remaining / rate), 'months');
+  if(speed <= 0) return '';
+  return addInterval(todayISO(), Math.ceil(remaining / speed), 'months');
 }
 function goalInfo(item){
   const start=Number(item.start)||0;
   const current=Number(item.current)||0;
   const target=Number(item.target)||100;
-  const remaining=Math.max(0,target-current);
+  const direction=goalDirection(start,target);
+  const remaining=goalRemaining(current,target,direction);
   const monthly=Number(item.monthly)||0;
+  const enteredMonthlySpeed=monthlySpeedTowardTarget(monthly,direction);
   const calculatedMonthly=calculatedGoalMonthly(item);
+  const calculatedSpeed=calculatedMonthly===null?0:monthlySpeedTowardTarget(calculatedMonthly,direction);
   const p=target===start?100:Math.max(0,Math.min(100,((current-start)/(target-start))*100));
-  const monthsByMonthly=monthly>0&&remaining>0?Math.ceil(remaining/monthly):null;
+  const monthsByMonthly=enteredMonthlySpeed>0&&remaining>0?Math.ceil(remaining/enteredMonthlySpeed):null;
   const predictedDate=monthsByMonthly?addInterval(todayISO(),monthsByMonthly,'months'):(remaining<=0?todayISO():'');
-  const calculatedDate=calculatedMonthly?dateByMonthlyRate(current,target,calculatedMonthly):'';
+  const calculatedDate=calculatedSpeed>0?dateByMonthlyRate(current,target,calculatedMonthly,direction):'';
   const dueDate=item.dueDate||'';
   const monthsToDue=dueDate?monthsBetweenApprox(todayISO(),dueDate):0;
   const neededMonthly=dueDate&&remaining>0&&monthsToDue>0?remaining/monthsToDue:null;
-  return {start,current,target,remaining,monthly,calculatedMonthly,p,monthsByMonthly,predictedDate,calculatedDate,dueDate,monthsToDue,neededMonthly};
+  return {start,current,target,direction,remaining,monthly,enteredMonthlySpeed,calculatedMonthly,calculatedSpeed,p,monthsByMonthly,predictedDate,calculatedDate,dueDate,monthsToDue,neededMonthly};
 }
 function goalTimeLabel(item){
   const g=goalInfo(item);
-  const entered = g.monthly>0
-    ? `Eingegebene Schätzung: ${numberLabel(g.monthly)}/Monat${g.predictedDate?` → fertig ca. ${fmt(g.predictedDate)}`:''}`
+  const mode = g.direction === 1 ? 'Aufbau' : 'Abbau';
+  const entered = g.enteredMonthlySpeed>0
+    ? `Eingegebene Schätzung (${mode}): ${numberLabel(g.monthly)}/Monat${g.predictedDate?` → fertig ca. ${fmt(g.predictedDate)}`:''}`
     : 'Eingegebene Schätzung: keine Monatsrate';
-  const calculated = g.calculatedMonthly
+  const calculated = g.calculatedMonthly!==null && g.calculatedSpeed>0
     ? `Berechnet aus Historie: ${numberLabel(g.calculatedMonthly)}/Monat${g.calculatedDate?` → fertig ca. ${fmt(g.calculatedDate)}`:''}`
-    : 'Berechnet aus Historie: noch nicht genug Daten';
+    : 'Berechnet aus Historie: noch nicht genug passende Daten';
   return `${entered}<br>${calculated}`;
 }
 function goalMetaText(item){
@@ -240,7 +259,7 @@ function goalMetaText(item){
   const lines=[goalTimeLabel(item)];
   if(g.dueDate){
     if(g.remaining<=0) lines.push(`Gewünschtes Datum: ${fmt(g.dueDate)}.`);
-    else if(g.neededMonthly!==null) lines.push(`Für ${fmt(g.dueDate)} nötig: ca. ${g.neededMonthly.toFixed(2)}/Monat.`);
+    else if(g.neededMonthly!==null) lines.push(`Für ${fmt(g.dueDate)} nötig: ca. ${g.neededMonthly.toFixed(2)}/Monat Richtung Ziel.`);
     else lines.push(`Gewünschtes Datum ${fmt(g.dueDate)} ist erreicht/überschritten.`);
   }
   return lines.join('<br>');

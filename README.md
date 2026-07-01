@@ -1,10 +1,7 @@
-# Life Tracker PWA v16
+# Life Tracker PWA v17
 
-Änderungen:
-- Verbrauch zeigt eingegebene Schätzung und berechneten Durchschnitt aus Historie.
-- Termine zeigen eingegebenes Intervall und berechnetes Intervall aus erledigten Terminen.
-- Ziele zeigen eingegebene Monats-Schätzung und berechnete Monatsrate aus Ziel-Historie.
-- Ziel-Historie wird beim Anlegen, Bearbeiten und „Aktuell ändern“ gespeichert.
-- Dashboard zeigt die getrennten Werte ebenfalls an.
-- Überfällige Termine bleiben direkt abhakbar und berechnen danach automatisch das nächste Datum.
-- Service Worker/Cache auf v16 gesetzt.
+Neu:
+- Ziele können jetzt auch sinkende Ziele abbilden, z. B. Kosten/Schulden von Startwert X über aktuellen Wert Y bis Ziel 0.
+- Positive Monats-Schätzung bedeutet Bewegung Richtung Ziel; negative Werte sind ebenfalls möglich.
+- Berechnete Monatsrate aus Historie funktioniert für Aufbau und Abbau.
+- Bestehende Daten und Stammdaten bleiben erhalten.
